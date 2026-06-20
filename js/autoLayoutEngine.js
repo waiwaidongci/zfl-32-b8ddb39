@@ -336,6 +336,109 @@ const AutoLayoutEngine = (function() {
     }
   }
 
+  function cleanupTransientFields(part) {
+    delete part._supporterId;
+    delete part._supporterLayer;
+    delete part._supportScore;
+    delete part._isDirectLayer;
+    delete part._priority;
+    delete part._typeBonus;
+    delete part._axisDist;
+    delete part._densityBonus;
+    delete part._combinedScore;
+    delete part._totalOverlap;
+  }
+
+  function buildQuantitySupplementCandidates(layer, existingScheme, selected) {
+    var preferredTypes = AutoLayoutConstraintModel.getPreferredTypes(layer);
+    var lowerParts = existingScheme.filter(function(p) {
+      return p.layer < layer && p.layer >= layer - AssemblyRules.MAX_SUPPORT_SEARCH_LAYERS;
+    });
+    var axis = AutoLayoutConstraintModel.getSymmetryAxis();
+    var candidates = [];
+    var yOffsets = [0, -42, 40, -84, -126, -21, 21, -63, -105];
+
+    for (var si = 0; si < lowerParts.length; si++) {
+      var supporter = lowerParts[si];
+      var sSize = AssemblyRules.getSize(supporter.type);
+      var sCenter = supporter.x + sSize.w / 2;
+
+      for (var ti = 0; ti < preferredTypes.length; ti++) {
+        var type = preferredTypes[ti];
+        if (!AssemblyRules.canSupport(supporter.type, type)) continue;
+
+        var nSize = AssemblyRules.getSize(type);
+        var baseY = AutoLayoutConstraintModel.calcY(supporter.y, sSize.h, nSize.h);
+        var baseX = Math.round(sCenter - nSize.w / 2);
+        var lateralOffsets = [
+          0,
+          -Math.round(Math.min(36, nSize.w * 0.25)),
+          Math.round(Math.min(36, nSize.w * 0.25)),
+          -Math.round(Math.min(64, nSize.w * 0.45)),
+          Math.round(Math.min(64, nSize.w * 0.45))
+        ];
+
+        for (var yi = 0; yi < yOffsets.length; yi++) {
+          for (var xi = 0; xi < lateralOffsets.length; xi++) {
+            var x = baseX + lateralOffsets[xi];
+            var y = baseY + yOffsets[yi];
+            var centerX = x + nSize.w / 2;
+            var dir = "正";
+
+            if (["昂", "耍头", "华拱"].includes(type)) {
+              if (centerX < axis - 20) dir = "左挑";
+              else if (centerX > axis + 20) dir = "右挑";
+            }
+
+            var candidate = makePart(type, x, y, layer, dir);
+            var comparisonScheme = existingScheme.concat(selected, candidates);
+            if (!AutoLayoutConstraintModel.isValidPlacement(candidate, comparisonScheme)) continue;
+
+            var best = AutoLayoutConstraintModel.findBestSupporter(candidate, comparisonScheme, true);
+            if (!best || !best.isEnough) continue;
+
+            candidate._combinedScore =
+              (best.isDirectLayer ? 200 : 80) +
+              best.score -
+              ti * 25 -
+              Math.abs(centerX - axis) * 0.05 -
+              Math.abs(yOffsets[yi]) * 0.2;
+            candidates.push(candidate);
+          }
+        }
+      }
+    }
+
+    candidates.sort(function(a, b) {
+      return (b._combinedScore || 0) - (a._combinedScore || 0);
+    });
+    return candidates;
+  }
+
+  function supplementLayerQuantity(layer, existingScheme, selected, partsPerLayer) {
+    var result = selected.slice();
+    if (result.length >= partsPerLayer) return result.slice(0, partsPerLayer);
+
+    var candidates = buildQuantitySupplementCandidates(layer, existingScheme, result);
+    for (var i = 0; i < candidates.length && result.length < partsPerLayer; i++) {
+      var candidate = candidates[i];
+      if (!AutoLayoutConstraintModel.isValidPlacement(candidate, existingScheme.concat(result))) continue;
+
+      var best = AutoLayoutConstraintModel.findBestSupporter(candidate, existingScheme.concat(result), true);
+      if (!best || !best.isEnough) continue;
+
+      var duplicate = result.some(function(part) {
+        return part.type === candidate.type &&
+          Math.abs(part.x - candidate.x) < 4 &&
+          Math.abs(part.y - candidate.y) < 4;
+      });
+      if (duplicate) continue;
+
+      result.push(candidate);
+    }
+    return result;
+  }
+
   function tryFillLayerStrict(layer, allScheme, partsPerLayer, symmetric, maxAttempts) {
     var currentLayerParts = allScheme.filter(function(p) { return p.layer === layer; });
     var bestResult = currentLayerParts.slice();
@@ -431,7 +534,11 @@ const AutoLayoutEngine = (function() {
             var targetY = AutoLayoutConstraintModel.calcY(best.part.y, sSize.h, nSize.h);
 
             if (Math.abs(processed[i].y - targetY) > 3) {
-              processed[i].y = targetY;
+              var adjusted = Object.assign({}, processed[i], { y: targetY });
+              var others = processed.filter(function(p) { return p.id !== processed[i].id; });
+              if (AutoLayoutConstraintModel.isValidPlacement(adjusted, others)) {
+                processed[i].y = targetY;
+              }
             }
           }
         }
@@ -467,26 +574,26 @@ const AutoLayoutEngine = (function() {
     for (var layer = 2; layer <= targetLayers; layer++) {
       var selected = tryFillLayerStrict(layer, scheme, partsPerLayer, symmetric, 4);
 
-      if (selected.length === 0) {
+      if (selected.length < partsPerLayer) {
         selected = fallbackFillLayer(layer, scheme, partsPerLayer, symmetric);
+      }
+
+      if (selected.length < partsPerLayer) {
+        selected = supplementLayerQuantity(layer, scheme, selected, partsPerLayer);
       }
 
       if (selected.length === 0) {
         continue;
       }
 
+      if (selected.length > partsPerLayer) {
+        selected = selected.slice(0, partsPerLayer);
+      }
+
       fillConnectStrings(selected, scheme);
 
       for (var i = 0; i < selected.length; i++) {
-        delete selected[i]._supporterId;
-        delete selected[i]._supporterLayer;
-        delete selected[i]._supportScore;
-        delete selected[i]._isDirectLayer;
-        delete selected[i]._priority;
-        delete selected[i]._typeBonus;
-        delete selected[i]._axisDist;
-        delete selected[i]._densityBonus;
-        delete selected[i]._combinedScore;
+        cleanupTransientFields(selected[i]);
         scheme.push(selected[i]);
       }
 

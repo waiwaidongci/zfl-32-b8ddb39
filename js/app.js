@@ -372,9 +372,11 @@ const App = {
     if (ids.size === 0) return;
     var newParts = GeometryTransform.mirrorCopy(this.scheme, ids, axisX);
     if (newParts.length === 0) return;
+    AutoLayoutPanel.recordCurrentScheme(this.scheme);
     newParts.forEach(function(p) { this.scheme.push(p); }.bind(this));
     SelectionManager.clear();
     newParts.forEach(function(p) { SelectionManager.addToSelection(p.id); });
+    this._markAutoLayoutManualEdit();
     this.refreshPlayerSteps();
     this.renderAll();
   },
@@ -384,9 +386,11 @@ const App = {
     if (ids.size === 0) return;
     var newParts = GeometryTransform.batchCopy(this.scheme, ids, count, spacing);
     if (newParts.length === 0) return;
+    AutoLayoutPanel.recordCurrentScheme(this.scheme);
     newParts.forEach(function(p) { this.scheme.push(p); }.bind(this));
     SelectionManager.clear();
     newParts.forEach(function(p) { SelectionManager.addToSelection(p.id); });
+    this._markAutoLayoutManualEdit();
     this.refreshPlayerSteps();
     this.renderAll();
   },
@@ -584,12 +588,15 @@ const App = {
     if (!isAssemblyMode) {
       ComponentEditor.renderEditor(this.editor, this.scheme, selectedSet,
         function(editorOpts) {
+          this._markAutoLayoutManualEdit();
           this.refreshPlayerSteps();
           this.renderAll(editorOpts || {});
         }.bind(this),
         function(id) {
+          AutoLayoutPanel.recordCurrentScheme(this.scheme);
           this.scheme = this.scheme.filter(function(x) { return x.id !== id; });
           SelectionManager.removeFromSelection(id);
+          this._markAutoLayoutManualEdit();
           this.refreshPlayerSteps();
           this.renderAll();
         }.bind(this)

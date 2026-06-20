@@ -177,18 +177,20 @@ const AutoLayoutPanel = (function() {
   }
 
   function onUndo() {
+    var before = _lastSchemeSnapshot ? JSON.parse(JSON.stringify(_lastSchemeSnapshot)) : null;
     var scheme = undo();
     if (scheme && _callbacks.onRestoreHistory) {
-      var diff = computeSchemeDiff(scheme, _lastSchemeSnapshot);
+      var diff = computeSchemeDiff(before, scheme);
       _callbacks.onRestoreHistory(scheme, diff);
       showUndoRedoNotice("撤销完成", diff);
     }
   }
 
   function onRedo() {
+    var before = _lastSchemeSnapshot ? JSON.parse(JSON.stringify(_lastSchemeSnapshot)) : null;
     var scheme = redo();
     if (scheme && _callbacks.onRestoreHistory) {
-      var diff = computeSchemeDiff(_lastSchemeSnapshot, scheme);
+      var diff = computeSchemeDiff(before, scheme);
       _callbacks.onRestoreHistory(scheme, diff);
       showUndoRedoNotice("重做完成", diff);
     }
