@@ -53,4 +53,61 @@ label { display: block; margin: 9px 0 5px; color: #76695c; font-size: 13px; }
 .bad { color: #a1382f; font-weight: 800; }
 .ok { color: #3f7653; font-weight: 800; }
 .exploded .part { transform: translateY(var(--explode)) !important; }
+.autoLayout-form { display: grid; gap: 6px; }
+.autoLayout-field label { margin: 4px 0 2px; font-size: 12px; }
+.autoLayout-field input[type="number"],
+.autoLayout-field input[type="text"] { padding: 7px; font-size: 13px; }
+.autoLayout-check-field label { display: flex; align-items: center; gap: 6px; margin: 6px 0; font-size: 13px; cursor: pointer; }
+.autoLayout-check-field input[type="checkbox"] { width: auto; margin: 0; }
+.autoLayout-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+.autoLayout-actions button { font-size: 13px; padding: 8px 10px; }
+.autoLayout-report { margin-top: 8px; display: grid; gap: 6px; }
+.autoLayout-status { padding: 6px 10px; border-radius: 6px; font-size: 13px; font-weight: 800; }
+.autoLayout-status-ok { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+.autoLayout-status-warn { background: #fff8e1; color: #8d6d12; border: 1px solid #ffe082; }
+.autoLayout-counts { font-size: 12px; color: #5a4e41; padding: 2px 4px; }
+.autoLayout-detail { font-size: 12px; color: #76695c; }
+.autoLayout-problems { display: grid; gap: 4px; }
+.autoLayout-prob-item { padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+.autoLayout-prob-item.bad { background: #fce4ec; color: #a1382f; }
+.autoLayout-prob-item.warn { background: #fff8e1; color: #8d6d12; }
+.autoLayout-issues { display: grid; gap: 4px; max-height: 200px; overflow: auto; }
+.autoLayout-issue-item { padding: 5px 8px; border-radius: 4px; font-size: 12px; border-left: 3px solid #d8cbb8; background: #fff; cursor: pointer; transition: all 0.15s; }
+.autoLayout-issue-item:hover { background: #fff0eb; border-left-color: #8d3d2d; }
+.autoLayout-issue-item.bad { border-left-color: #a1382f; color: #7a2a22; }
+.autoLayout-issue-item.warn { border-left-color: #b87d23; color: #7a5616; }
+.autoLayout-issue-item.info { border-left-color: #5a8fa8; color: #3a6a80; }
+.autoLayout-issue-item.info .sev-badge { background: #5a8fa8; color: #fff; }
+.autoLayout-more { font-size: 11px; color: #76695c; padding: 2px 4px; }
+.autoLayout-history { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px; }
+.autoLayout-history button { font-size: 12px; padding: 6px 8px; }
+.autoLayout-history button:disabled { opacity: 0.45; cursor: not-allowed; }
+.autoLayout-edit-indicator {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  background: #e3f2fd;
+  color: #1565c0;
+  border: 1px solid #90caf9;
+  display: none;
+}
+.autoLayout-confirm-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: #8d3d2d;
+  margin-bottom: 10px;
+}
+.autoLayout-confirm-hint {
+  font-size: 12px;
+  color: #76695c;
+  padding: 6px 8px;
+  background: #f5f0e6;
+  border-radius: 6px;
+  margin-bottom: 14px;
+}
+.info { color: #3a6a80; }
+.autoLayout-confirm-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.35); display: grid; place-items: center; z-index: 9999; }
+.autoLayout-confirm-dialog { background: #fffaf0; border: 1px solid #d8cbb8; border-radius: 12px; padding: 24px; max-width: 380px; box-shadow: 0 12px 40px rgba(60,35,20,.25); }
+.autoLayout-confirm-msg { font-size: 15px; line-height: 1.6; margin-bottom: 18px; color: #252019; }
+.autoLayout-confirm-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (max-width: 1050px) { header { display: block; } .app { grid-template-columns: 1fr; } .canvasWrap { min-height: 520px; } }

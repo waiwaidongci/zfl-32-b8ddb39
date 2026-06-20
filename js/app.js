@@ -21,6 +21,7 @@ const App = {
   schemeVersionUnsubscribe: null,
   viewToggleBtn: null,
   canvas3DWrap: null,
+  autoLayoutPanel: null,
 
   scheme: [],
   drag: null,
@@ -28,6 +29,7 @@ const App = {
   playerUnsubscribe: null,
   measurementUnsubscribe: null,
   selectionUnsubscribe: null,
+  _autoLayoutManualEdits: false,
 
   _getSelectedSet() {
     return new Set(SelectionManager.getIds());
@@ -62,6 +64,7 @@ const App = {
     SelectionManager.init();
     this.initBatch();
     this.initMeasurement();
+    this.initAutoLayout();
     this.bindEvents();
     this.initPlayer();
     this.initSchemeVersion();
@@ -209,6 +212,109 @@ const App = {
     BatchPanel.render(SelectionManager.count());
   },
 
+  initAutoLayout() {
+    var self = this;
+    AutoLayoutPanel.init("#autoLayoutPanel", {
+      onGenerate: function(config) { return self._onAutoLayoutGenerate(config); },
+      onRecheck: function() { return self._onAutoLayoutRecheck(); },
+      onRepair: function(config) { return self._onAutoLayoutRepair(config); },
+      onRestoreHistory: function(scheme) { return self._onAutoLayoutRestoreHistory(scheme); },
+      onSelectPart: function(id) { self.selectPartById(id); }
+    });
+  },
+
+  _onAutoLayoutGenerate(config) {
+    var scheme = AutoLayoutEngine.generateScheme(config);
+    this.scheme = scheme;
+    this._autoLayoutManualEdits = false;
+    AutoLayoutPanel.setLastGenerated(scheme);
+    AutoLayoutPanel.clearManualEditFlag();
+    SelectionManager.clear();
+    this._applyMeasurementData(null);
+    this.refreshPlayerSteps();
+    this.renderAll();
+    return scheme;
+  },
+
+  _onAutoLayoutRecheck() {
+    var config = AutoLayoutPanel.getConfig();
+    var result = AutoLayoutConflictDetector.detectAll(this.scheme, this.parts, {
+      symmetric: config.symmetric
+    });
+    AutoLayoutPanel.showConflictReport(result);
+    return result;
+  },
+
+  _onAutoLayoutRepair(config) {
+    var originalScheme = this.scheme.map(function(p) { return Object.assign({}, p); });
+    var repairedScheme = AutoLayoutEngine.repairScheme(this.scheme, config);
+
+    var yAdjusted = 0;
+    var connectUpdated = 0;
+    var originalMap = {};
+    originalScheme.forEach(function(p) { originalMap[p.id] = p; });
+
+    repairedScheme.forEach(function(p) {
+      var orig = originalMap[p.id];
+      if (orig) {
+        if (Math.abs(orig.y - p.y) > 1) yAdjusted++;
+        if (orig.connect !== p.connect) connectUpdated++;
+      }
+    });
+
+    var symmetryAdded = repairedScheme.length - originalScheme.length;
+    var totalChanges = yAdjusted + connectUpdated + Math.max(0, symmetryAdded);
+
+    if (totalChanges > 0) {
+      AutoLayoutPanel.recordCurrentScheme(this.scheme);
+      this.scheme = repairedScheme;
+      this._markAutoLayoutManualEdit();
+      this.refreshPlayerSteps();
+      this.renderAll();
+    }
+
+    return {
+      changes: totalChanges,
+      yAdjusted: yAdjusted,
+      connectUpdated: connectUpdated,
+      symmetryAdded: Math.max(0, symmetryAdded)
+    };
+  },
+
+  _onAutoLayoutRestoreHistory(scheme) {
+    this.scheme = scheme.map(function(p) { return Object.assign({}, p); });
+    SelectionManager.clear();
+    this.refreshPlayerSteps();
+    this.renderAll();
+
+    var config = AutoLayoutPanel.getConfig();
+    var quickResult = AutoLayoutConflictDetector.quickCheck(this.scheme);
+    AutoLayoutPanel.showResult(this.scheme, config);
+  },
+
+  _markAutoLayoutManualEdit() {
+    if (!this._autoLayoutManualEdits) {
+      this._autoLayoutManualEdits = true;
+      AutoLayoutPanel.markManualEdit();
+      AutoLayoutPanel.recordCurrentScheme(this.scheme);
+    } else {
+      var shouldRecord = false;
+      if (!this._lastHistoryScheme) {
+        shouldRecord = true;
+      } else {
+        var currentStr = JSON.stringify(this.scheme);
+        var lastStr = JSON.stringify(this._lastHistoryScheme);
+        if (currentStr !== lastStr) {
+          shouldRecord = true;
+        }
+      }
+      if (shouldRecord) {
+        AutoLayoutPanel.recordCurrentScheme(this.scheme);
+        this._lastHistoryScheme = this.scheme.map(function(p) { return Object.assign({}, p); });
+      }
+    }
+  },
+
   initMeasurement() {
     var current = SchemeState.getCurrentSchemeData();
     if (current && current.measurement) {
@@ -309,6 +415,7 @@ const App = {
 
     window.onpointerup = function() {
       if (this.drag && !AssemblyPlayerState.isActive) {
+        this._markAutoLayoutManualEdit();
         this.refreshPlayerSteps();
       }
       this.drag = null;
@@ -423,6 +530,7 @@ const App = {
           var idSet = new Set(ids);
           this.scheme = this.scheme.filter(function(x) { return !idSet.has(x.id); });
           SelectionManager.clear();
+          this._markAutoLayoutManualEdit();
           this.refreshPlayerSteps();
           this.renderAll();
           event.preventDefault();
@@ -539,7 +647,9 @@ const App = {
       dir: "正",
       connect: ""
     };
+    AutoLayoutPanel.recordCurrentScheme(this.scheme);
     this.scheme.push(newPart);
+    this._markAutoLayoutManualEdit();
     SelectionManager.select(newPart.id);
     this.refreshPlayerSteps();
     this.renderAll();
