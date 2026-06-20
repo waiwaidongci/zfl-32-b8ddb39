@@ -3,6 +3,7 @@ const AssemblyChecker = {
     const issues = [];
 
     this.checkMissingConnect(scheme, issues);
+    this.checkConnectMentionExists(scheme, issues);
     this.checkSupportAndSuspension(scheme, issues);
     this.checkSameLayerOverlap(scheme, issues);
     this.checkDirectionConsistency(scheme, issues);
@@ -44,25 +45,70 @@ const AssemblyChecker = {
     }
   },
 
+  checkConnectMentionExists(scheme, issues) {
+    for (const p of scheme) {
+      if (!p.connect || p.connect.trim() === "") continue;
+
+      const mentionedTypes = AssemblyRules.extractMentionedPartTypes(p.connect);
+      const connLower = p.connect.toLowerCase();
+
+      for (const mentionedType of mentionedTypes) {
+        if (mentionedType === p.type) continue;
+
+        const exists = scheme.some(o => o.type === mentionedType && o.id !== p.id);
+        if (!exists) {
+          issues.push({
+            partId: p.id,
+            partType: p.type,
+            layer: p.layer,
+            severity: "warning",
+            rule: "connect_mention_missing",
+            message: p.type + "（第" + p.layer + "层）连接点「" + p.connect + "」提到的「" + mentionedType + "」在方案中不存在"
+          });
+        }
+      }
+
+      if (connLower.includes("柱头")) {
+        if (p.type !== "栌斗" && p.layer !== 1) {
+          issues.push({
+            partId: p.id,
+            partType: p.type,
+            layer: p.layer,
+            severity: "warning",
+            rule: "connect_zhutou_misplaced",
+            message: p.type + "（第" + p.layer + "层）连接点「柱头」通常只用于首层栌斗"
+          });
+        }
+      }
+    }
+  },
+
   checkSupportAndSuspension(scheme, issues) {
     const byLayer = {};
     for (const p of scheme) {
       if (!byLayer[p.layer]) byLayer[p.layer] = [];
       byLayer[p.layer].push(p);
     }
+    const allLayers = Object.keys(byLayer).map(Number).sort((a, b) => a - b);
 
     for (const p of scheme) {
       if (p.layer <= 1) continue;
 
-      const lowerParts = byLayer[p.layer - 1] || [];
-      if (lowerParts.length === 0) {
+      const candidateLayers = allLayers.filter(l => l < p.layer && l >= p.layer - AssemblyRules.MAX_SUPPORT_SEARCH_LAYERS);
+      const candidateParts = [];
+      for (const l of candidateLayers) {
+        for (const c of byLayer[l]) candidateParts.push({ part: c, layerDist: p.layer - l });
+      }
+      candidateParts.sort((a, b) => a.layerDist - b.layerDist);
+
+      if (candidateParts.length === 0) {
         issues.push({
           partId: p.id,
           partType: p.type,
           layer: p.layer,
           severity: "error",
           rule: "no_support_layer",
-          message: p.type + "（第" + p.layer + "层）下方第" + (p.layer - 1) + "层没有任何构件，完全悬空"
+          message: p.type + "（第" + p.layer + "层）下方没有任何构件，完全悬空"
         });
         continue;
       }
@@ -71,8 +117,9 @@ const AssemblyChecker = {
       let hasValidSupport = false;
       let hasPositionalSupport = false;
       let wrongSupportType = null;
+      let nearestWrongLayer = null;
 
-      for (const lower of lowerParts) {
+      for (const { part: lower, layerDist } of candidateParts) {
         const lowerRect = AssemblyRules.getRect(lower);
         const supportCheck = AssemblyRules.checkSupportOverlap(upperRect, lowerRect);
 
@@ -81,8 +128,9 @@ const AssemblyChecker = {
           if (AssemblyRules.canSupport(lower.type, p.type)) {
             hasValidSupport = true;
             break;
-          } else {
+          } else if (!wrongSupportType || layerDist < nearestWrongLayer) {
             wrongSupportType = lower.type;
+            nearestWrongLayer = layerDist;
           }
         }
       }
@@ -138,7 +186,7 @@ const AssemblyChecker = {
               relatedPartIds: [b.id],
               severity: "warning",
               rule: "same_layer_overlap",
-              message: "第" + a.layer + "层的" + a.type + "与" + b.type + "位置重叠"
+              message: "第" + a.layer + "层的" + a.type + "与" + b.type + "位置重叠过多"
             });
           }
         }
@@ -150,20 +198,15 @@ const AssemblyChecker = {
     for (const p of scheme) {
       if (!AssemblyRules.isDirectionalPart(p.type)) continue;
 
-      if (!AssemblyRules.directionMatchesConnect(p.dir, p.connect, p.type)) {
-        const kw = AssemblyRules.CONNECT_KEYWORDS;
-        let expectedDir = "正";
-        if (p.connect) {
-          if (kw.left.some(k => p.connect.includes(k))) expectedDir = "左挑";
-          if (kw.right.some(k => p.connect.includes(k))) expectedDir = "右挑";
-        }
+      const selfCheck = AssemblyRules.selfDirMatchesConnect(p.dir, p.connect, p.type);
+      if (!selfCheck.ok) {
         issues.push({
           partId: p.id,
           partType: p.type,
           layer: p.layer,
           severity: "warning",
           rule: "direction_mismatch",
-          message: p.type + "（第" + p.layer + "层）方向为「" + p.dir + "」，但连接点「" + p.connect + "」暗示应为「" + expectedDir + "」"
+          message: p.type + "（第" + p.layer + "层）方向为「" + p.dir + "」，但连接点「" + p.connect + "」暗示应为「" + selfCheck.expected + "」"
         });
       }
     }

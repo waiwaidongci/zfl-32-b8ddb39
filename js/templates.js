@@ -25,8 +25,8 @@ const DOUGONG_TEMPLATES = [
       { type: "散斗", x: 607, y: 522, layer: 3, dir: "正", connect: "华拱右端" },
       { type: "昂", x: 504, y: 480, layer: 4, dir: "正", connect: "下承华拱" },
       { type: "散斗", x: 492, y: 445, layer: 5, dir: "左挑", connect: "昂前端" },
-      { type: "耍头", x: 514, y: 442, layer: 5, dir: "正", connect: "昂后尾" },
-      { type: "散斗", x: 588, y: 445, layer: 5, dir: "右挑", connect: "耍头前端" }
+      { type: "耍头", x: 544, y: 442, layer: 5, dir: "正", connect: "昂后尾" },
+      { type: "散斗", x: 618, y: 445, layer: 5, dir: "右挑", connect: "耍头前端" }
     ]
   },
   {
@@ -47,7 +47,7 @@ const DOUGONG_TEMPLATES = [
       { type: "散斗", x: 478, y: 422, layer: 7, dir: "左挑", connect: "头昂前端" },
       { type: "散斗", x: 568, y: 422, layer: 7, dir: "右挑", connect: "头昂后尾" },
       { type: "昂", x: 462, y: 385, layer: 8, dir: "正", connect: "下承头昂" },
-      { type: "耍头", x: 470, y: 348, layer: 9, dir: "正", connect: "二昂后尾" },
+      { type: "耍头", x: 518, y: 348, layer: 9, dir: "正", connect: "二昂后尾" },
       { type: "散斗", x: 460, y: 347, layer: 9, dir: "左挑", connect: "二昂前端" }
     ]
   }

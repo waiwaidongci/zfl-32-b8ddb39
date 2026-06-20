@@ -8,16 +8,18 @@ const AssemblyRules = {
   },
 
   SUPPORT_RULES: {
-    "栌斗": ["华拱", "散斗"],
+    "栌斗": ["华拱", "昂", "耍头", "散斗"],
     "华拱": ["华拱", "昂", "耍头", "散斗"],
     "昂": ["昂", "耍头", "散斗"],
     "耍头": ["散斗"],
-    "散斗": ["散斗"]
+    "散斗": ["华拱", "昂", "耍头", "散斗"]
   },
 
   DIRECTIONAL_PARTS: ["昂", "耍头"],
 
   VALID_DIRS: ["正", "左挑", "右挑"],
+
+  PART_TYPES_FOR_CONNECT: ["栌斗", "华拱", "昂", "耍头", "散斗"],
 
   CONNECT_KEYWORDS: {
     left: ["左", "前端", "前"],
@@ -25,10 +27,17 @@ const AssemblyRules = {
     center: ["下承", "中", "柱头"]
   },
 
+  SELF_DIR_KEYWORDS: {
+    left: ["左挑", "向左", "朝左"],
+    right: ["右挑", "向右", "朝右"]
+  },
+
   OVERLAP_TOLERANCE_X: -12,
   GAP_TOLERANCE_Y_MIN: -20,
-  GAP_TOLERANCE_Y_MAX: 80,
-  SAME_LAYER_OVERLAP_TOLERANCE: 5,
+  GAP_TOLERANCE_Y_MAX: 160,
+  SAME_LAYER_OVERLAP_TOLERANCE_X: 28,
+  SAME_LAYER_OVERLAP_TOLERANCE_Y: 28,
+  MAX_SUPPORT_SEARCH_LAYERS: 3,
 
   getSize(type) {
     return this.PART_SIZES[type] || { w: 60, h: 40 };
@@ -54,6 +63,32 @@ const AssemblyRules = {
 
   isDirectionalPart(type) {
     return this.DIRECTIONAL_PARTS.includes(type);
+  },
+
+  extractMentionedPartTypes(connect) {
+    if (!connect) return [];
+    const mentioned = [];
+    for (const t of this.PART_TYPES_FOR_CONNECT) {
+      if (connect.includes(t)) mentioned.push(t);
+    }
+    return mentioned;
+  },
+
+  selfDirMatchesConnect(dir, connect, type) {
+    if (!this.isDirectionalPart(type)) return { ok: true, expected: null };
+    if (!connect) return { ok: true, expected: null };
+
+    const kw = this.SELF_DIR_KEYWORDS;
+    const hasLeftDir = kw.left.some(k => connect.includes(k));
+    const hasRightDir = kw.right.some(k => connect.includes(k));
+
+    if (hasLeftDir && dir !== "左挑") {
+      return { ok: false, expected: "左挑" };
+    }
+    if (hasRightDir && dir !== "右挑") {
+      return { ok: false, expected: "右挑" };
+    }
+    return { ok: true, expected: null };
   },
 
   directionMatchesConnect(dir, connect, type) {
@@ -83,7 +118,14 @@ const AssemblyRules = {
   checkSameLayerOverlap(rectA, rectB) {
     const overlapX = Math.min(rectA.right, rectB.right) - Math.max(rectA.left, rectB.left);
     const overlapY = Math.min(rectA.bottom, rectB.bottom) - Math.max(rectA.top, rectB.top);
-    return overlapX > this.SAME_LAYER_OVERLAP_TOLERANCE && overlapY > this.SAME_LAYER_OVERLAP_TOLERANCE;
+    const minW = Math.min(rectA.w, rectB.w);
+    const minH = Math.min(rectA.h, rectB.h);
+    const overlapArea = overlapX * overlapY;
+    const minArea = minW * minH;
+    const areaRatio = overlapArea / minArea;
+    const minOverlapX = Math.min(this.SAME_LAYER_OVERLAP_TOLERANCE_X, minW * 0.45);
+    const minOverlapY = Math.min(this.SAME_LAYER_OVERLAP_TOLERANCE_Y, minH * 0.6);
+    return (overlapX > minOverlapX && overlapY > minOverlapY) || areaRatio > 0.35;
   }
 };
 
