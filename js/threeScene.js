@@ -190,6 +190,65 @@ const ThreeScene = (function() {
     controls.update();
   }
 
+  function focusOnPartIds(partIds) {
+    if (!partsGroup || !camera || !controls) return;
+    if (!partIds || partIds.length === 0) return;
+
+    var targetGroups = [];
+    partsGroup.children.forEach(function(g) {
+      if (g.userData && partIds.indexOf(g.userData.partId) !== -1) {
+        targetGroups.push(g);
+      }
+    });
+
+    if (targetGroups.length === 0) return;
+
+    var bbox = new THREE.Box3();
+    targetGroups.forEach(function(g) {
+      var partBox = new THREE.Box3().setFromObject(g);
+      bbox.union(partBox);
+    });
+
+    var center = new THREE.Vector3();
+    bbox.getCenter(center);
+
+    var size = new THREE.Vector3();
+    bbox.getSize(size);
+    var maxDim = Math.max(size.x, size.y, size.z);
+    var distance = Math.max(maxDim * 2.5, 150);
+
+    var direction = new THREE.Vector3();
+    direction.subVectors(camera.position, controls.target).normalize();
+
+    var newTarget = center.clone();
+    var newPosition = center.clone().add(direction.multiplyScalar(distance));
+
+    animateCamera(newPosition, newTarget, 600);
+  }
+
+  function animateCamera(targetPos, targetLookAt, duration) {
+    if (!camera || !controls) return;
+
+    var startPos = camera.position.clone();
+    var startTarget = controls.target.clone();
+    var startTime = performance.now();
+
+    function step() {
+      var elapsed = performance.now() - startTime;
+      var t = Math.min(elapsed / duration, 1);
+      var ease = 1 - Math.pow(1 - t, 3);
+
+      camera.position.lerpVectors(startPos, targetPos, ease);
+      controls.target.lerpVectors(startTarget, targetLookAt, ease);
+      controls.update();
+
+      if (t < 1) {
+        requestAnimationFrame(step);
+      }
+    }
+    step();
+  }
+
   function dispose() {
     if (animationId) cancelAnimationFrame(animationId);
     if (renderer) {
@@ -211,6 +270,7 @@ const ThreeScene = (function() {
     findPartGroup: findPartGroup,
     setOnPartClick: setOnPartClick,
     resetCamera: resetCamera,
+    focusOnPartIds: focusOnPartIds,
     handleResize: handleResize,
     dispose: dispose,
     isInitialized: isInitialized

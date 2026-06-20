@@ -8,7 +8,11 @@ const SelectionManager = {
   },
 
   select(id) {
-    this._selectedIds = new Set([id]);
+    this.setSelection([id]);
+  },
+
+  setSelection(ids) {
+    this._selectedIds = new Set(ids || []);
     this._notify();
   },
 

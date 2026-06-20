@@ -111,6 +111,11 @@ const Preview3D = (function() {
     return is3DMode;
   }
 
+  function focusOnPartIds(ids) {
+    if (!ThreeScene.isInitialized()) return;
+    ThreeScene.focusOnPartIds(ids);
+  }
+
   function handleResize() {
     if (is3DMode) ThreeScene.handleResize();
   }
@@ -120,6 +125,7 @@ const Preview3D = (function() {
     toggleView: toggleView,
     updateScheme: updateScheme,
     setHighlightedIds: setHighlightedIds,
+    focusOnPartIds: focusOnPartIds,
     toggleExplosion: toggleExplosion,
     setExploded: setExploded,
     isActive: isActive,

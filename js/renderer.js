@@ -50,7 +50,7 @@ const Renderer = {
     ).join("");
   },
 
-  renderChecks(checks, scheme, parts, onSelectPart) {
+  renderChecks(checks, scheme, parts, onSelectParts) {
     const result = AssemblyChecker.checkAll(scheme, parts);
     const countsHtml = '<div class="item">' + result.counts + '</div>';
 
@@ -63,7 +63,7 @@ const Renderer = {
     const errorPartIds = [];
     const warningPartIds = [];
 
-    const issuesHtml = result.issues.map(issue => {
+    const issuesHtml = result.issues.map((issue, idx) => {
       if (issue.severity === "error") {
         errorPartIds.push(issue.partId);
         if (issue.relatedPartIds) errorPartIds.push(...issue.relatedPartIds);
@@ -71,9 +71,11 @@ const Renderer = {
         warningPartIds.push(issue.partId);
         if (issue.relatedPartIds) warningPartIds.push(...issue.relatedPartIds);
       }
+      const allIds = [issue.partId];
+      if (issue.relatedPartIds) allIds.push(...issue.relatedPartIds);
       const sevClass = issue.severity === "error" ? "bad" : "warn";
       const sevLabel = issue.severity === "error" ? "错误" : "警告";
-      return '<div class="item issue-item ' + sevClass + '" data-part-id="' + issue.partId + '" title="点击定位此构件">' +
+      return '<div class="item issue-item ' + sevClass + '" data-issue-idx="' + idx + '" title="点击定位相关构件">' +
         '<span class="sev-badge">' + sevLabel + '</span>' +
         issue.message +
         '</div>';
@@ -86,8 +88,12 @@ const Renderer = {
     checks.querySelectorAll(".issue-item").forEach(el => {
       el.style.cursor = "pointer";
       el.onclick = () => {
-        const id = el.dataset.partId;
-        if (id && onSelectPart) onSelectPart(id);
+        const idx = parseInt(el.dataset.issueIdx, 10);
+        const issue = result.issues[idx];
+        if (!issue) return;
+        const allIds = [issue.partId];
+        if (issue.relatedPartIds) allIds.push(...issue.relatedPartIds);
+        if (onSelectParts) onSelectParts(allIds);
       };
     });
 

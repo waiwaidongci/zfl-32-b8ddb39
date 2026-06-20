@@ -594,7 +594,7 @@ const App = {
       if (!isAssemblyMode) {
         Renderer.renderTree(this.tree, this.scheme);
         var checkResult = Renderer.renderChecks(this.checks, this.scheme, this.parts,
-          function(id) { this.selectPartById(id); }.bind(this)
+          function(ids) { this.selectPartsByIds(ids); }.bind(this)
         );
         this.errorPartIds = checkResult.errorPartIds;
       }
@@ -620,14 +620,27 @@ const App = {
   },
 
   selectPartById(id) {
-    SelectionManager.select(id);
-    var part = this.scheme.find(function(p) { return p.id === id; });
-    if (part) {
-      var partEl = this.canvas.querySelector('.part[data-id="' + id + '"]');
-      if (partEl) {
-        partEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+    this.selectPartsByIds([id]);
+  },
+
+  selectPartsByIds(ids) {
+    if (!ids || ids.length === 0) return;
+
+    SelectionManager.setSelection(ids);
+
+    var parts = this.scheme.filter(function(p) { return ids.indexOf(p.id) !== -1; });
+    if (parts.length > 0) {
+      var firstId = ids[0];
+      var firstEl = this.canvas.querySelector('.part[data-id="' + firstId + '"]');
+      if (firstEl) {
+        firstEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
       }
     }
+
+    if (Preview3D.isActive()) {
+      Preview3D.focusOnPartIds(ids);
+    }
+
     this.renderAll();
   },
 
