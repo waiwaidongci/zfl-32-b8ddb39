@@ -8,16 +8,16 @@ const AutoLayoutConstraintModel = (function() {
   const LAYER_TYPE_PRIORITY = [
     null,
     ["栌斗"],
-    ["华拱"],
-    ["散斗"],
-    ["华拱", "昂"],
-    ["散斗", "耍头"],
-    ["华拱", "昂"],
-    ["散斗", "耍头"],
-    ["昂", "华拱"],
-    ["散斗", "耍头"],
-    ["华拱", "昂"],
-    ["散斗", "耍头"],
+    ["华拱", "散斗", "昂"],
+    ["散斗", "华拱", "昂"],
+    ["华拱", "昂", "散斗"],
+    ["散斗", "华拱", "昂"],
+    ["耍头", "昂", "华拱", "散斗"],
+    ["散斗", "华拱", "耍头"],
+    ["昂", "华拱", "散斗"],
+    ["散斗", "耍头", "华拱"],
+    ["华拱", "昂", "散斗"],
+    ["散斗", "耍头", "华拱"],
     ["散斗", "耍头"],
     ["华拱", "昂"],
     ["散斗"]
@@ -143,10 +143,11 @@ const AutoLayoutConstraintModel = (function() {
     };
   }
 
-  function findBestSupporter(candidate, lowerParts) {
+  function findBestSupporter(candidate, lowerParts, preferDirectLayer) {
     var cRect = AssemblyRules.getRect(candidate);
     var best = null;
     var bestScore = -Infinity;
+    var directLayer = candidate.layer - 1;
 
     for (var i = 0; i < lowerParts.length; i++) {
       var lp = lowerParts[i];
@@ -160,8 +161,10 @@ const AutoLayoutConstraintModel = (function() {
       if (!check.isSupported) continue;
 
       var supportInfo = calculateSupportOverlap(candidate, lp);
-      var score = supportInfo.overlapX * 1.0 - layerDist * 10;
+      var score = supportInfo.overlapX * 1.0 - layerDist * 25;
       if (supportInfo.isEnough) score += 100;
+      if (preferDirectLayer && lp.layer === directLayer) score += 150;
+      if (lp.layer === directLayer) score += 50;
 
       if (score > bestScore) {
         bestScore = score;
@@ -171,11 +174,47 @@ const AutoLayoutConstraintModel = (function() {
           overlapRatio: supportInfo.overlapRatio,
           layerDist: layerDist,
           isEnough: supportInfo.isEnough,
-          score: score
+          score: score,
+          isDirectLayer: lp.layer === directLayer
         };
       }
     }
     return best;
+  }
+
+  function findAllSupporters(candidate, lowerParts) {
+    var cRect = AssemblyRules.getRect(candidate);
+    var supporters = [];
+    var directLayer = candidate.layer - 1;
+
+    for (var i = 0; i < lowerParts.length; i++) {
+      var lp = lowerParts[i];
+      if (lp.layer >= candidate.layer) continue;
+      var layerDist = candidate.layer - lp.layer;
+      if (layerDist > AssemblyRules.MAX_SUPPORT_SEARCH_LAYERS) continue;
+      if (!AssemblyRules.canSupport(lp.type, candidate.type)) continue;
+
+      var lRect = AssemblyRules.getRect(lp);
+      var check = AssemblyRules.checkSupportOverlap(cRect, lRect);
+      if (!check.isSupported) continue;
+
+      var supportInfo = calculateSupportOverlap(candidate, lp);
+      var score = supportInfo.overlapX * 1.0 - layerDist * 25;
+      if (supportInfo.isEnough) score += 100;
+      if (lp.layer === directLayer) score += 50;
+
+      supporters.push({
+        part: lp,
+        overlapX: supportInfo.overlapX,
+        overlapRatio: supportInfo.overlapRatio,
+        layerDist: layerDist,
+        isEnough: supportInfo.isEnough,
+        score: score,
+        isDirectLayer: lp.layer === directLayer
+      });
+    }
+    supporters.sort(function(a, b) { return b.score - a.score; });
+    return supporters;
   }
 
   function hasSupportAbove(candidate, lowerParts) {
@@ -191,42 +230,65 @@ const AutoLayoutConstraintModel = (function() {
   function generateConnectString(part, scheme) {
     if (part.layer === 1) return "柱头";
 
-    var best = null;
-    var bestOverlap = -Infinity;
+    var allSupporters = findAllSupporters(part, scheme);
+    if (allSupporters.length === 0) return "";
 
-    for (var i = 0; i < scheme.length; i++) {
-      var s = scheme[i];
-      if (s.layer >= part.layer) continue;
-      if (!AssemblyRules.canSupport(s.type, part.type)) continue;
+    var directSupporters = allSupporters.filter(function(s) { return s.isDirectLayer; });
+    var primarySupporters = directSupporters.length > 0 ? directSupporters : allSupporters;
 
-      var layerDist = part.layer - s.layer;
-      if (layerDist > AssemblyRules.MAX_SUPPORT_SEARCH_LAYERS) continue;
+    var best = primarySupporters[0];
+    var bestPart = best.part;
 
-      var pRect = AssemblyRules.getRect(part);
-      var sRect = AssemblyRules.getRect(s);
-      var check = AssemblyRules.checkSupportOverlap(pRect, sRect);
+    var sSize = AssemblyRules.getSize(bestPart.type);
+    var pSize = AssemblyRules.getSize(part.type);
+    var sCenterX = bestPart.x + sSize.w / 2;
+    var pCenterX = part.x + pSize.w / 2;
+    var offset = pCenterX - sCenterX;
+    var offsetRatio = Math.abs(offset) / (sSize.w / 2);
 
-      if (check.isSupported && check.overlapX > bestOverlap) {
-        bestOverlap = check.overlapX;
-        best = s;
+    var positionDesc = "";
+    if (Math.abs(offset) < 15 || offsetRatio < 0.15) {
+      positionDesc = "下承";
+    } else if (offset < 0) {
+      if (offsetRatio > 0.7) {
+        positionDesc = "";
+      } else if (offsetRatio > 0.4) {
+        positionDesc = "";
+      } else {
+        positionDesc = "";
+      }
+      positionDesc = bestPart.type + "左部";
+      if (allSupporters.length === 1 && Math.abs(offset) > sSize.w * 0.35) {
+        positionDesc = bestPart.type + "左端";
+      }
+    } else {
+      positionDesc = bestPart.type + "右部";
+      if (allSupporters.length === 1 && Math.abs(offset) > sSize.w * 0.35) {
+        positionDesc = bestPart.type + "右端";
       }
     }
 
-    if (!best) return "";
-
-    var sSize = AssemblyRules.getSize(best.type);
-    var pSize = AssemblyRules.getSize(part.type);
-    var sCenterX = best.x + sSize.w / 2;
-    var pCenterX = part.x + pSize.w / 2;
-    var offset = pCenterX - sCenterX;
-
-    if (Math.abs(offset) < 15) {
-      return "下承" + best.type;
+    if (Math.abs(offset) < 15 || offsetRatio < 0.15) {
+      positionDesc = "下承" + bestPart.type;
+    } else if (offset < -sSize.w * 0.3) {
+      positionDesc = bestPart.type + "左端";
+    } else if (offset > sSize.w * 0.3) {
+      positionDesc = bestPart.type + "右端";
     } else if (offset < 0) {
-      return best.type + "左端";
+      positionDesc = bestPart.type + "左部";
     } else {
-      return best.type + "右端";
+      positionDesc = bestPart.type + "右部";
     }
+
+    var connectStr = positionDesc;
+    if (primarySupporters.length >= 2) {
+      var second = primarySupporters[1];
+      if (second.isEnough && second.overlapX >= MIN_OVERLAP_FOR_SUPPORT * 0.8) {
+        connectStr = connectStr + "兼承" + second.part.type;
+      }
+    }
+
+    return connectStr;
   }
 
   function getSymmetryAxis() {
@@ -294,6 +356,7 @@ const AutoLayoutConstraintModel = (function() {
     hasAdequateSupport: hasAdequateSupport,
     calculateSupportOverlap: calculateSupportOverlap,
     findBestSupporter: findBestSupporter,
+    findAllSupporters: findAllSupporters,
     generateConnectString: generateConnectString,
     getSymmetryAxis: getSymmetryAxis,
     mirrorPart: mirrorPart,

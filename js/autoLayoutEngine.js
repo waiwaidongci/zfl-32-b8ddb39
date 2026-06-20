@@ -12,23 +12,133 @@ const AutoLayoutEngine = (function() {
     };
   }
 
-  function collectCandidatesForLayer(layer, supporters, existingScheme, partsPerLayer, symmetric) {
+  function calcLayerDensityWeights(targetParts, existingParts, layer) {
+    var weight = 1.0;
+    var targetForLayer = targetParts;
+    if (layer === 1) weight = 0.3;
+    if (existingParts >= targetForLayer) weight = 0.1;
+    else if (existingParts < targetForLayer * 0.3) weight = 2.5;
+    else if (existingParts < targetForLayer * 0.6) weight = 1.5;
+    return weight;
+  }
+
+  function collectExtendedCandidatePositions(newType, supporter, existingScheme, layer) {
+    var sSize = AssemblyRules.getSize(supporter.type);
+    var nSize = AssemblyRules.getSize(newType);
+    var y = AutoLayoutConstraintModel.calcY(supporter.y, sSize.h, nSize.h);
+    var positions = [];
+    var mode = AutoLayoutConstraintModel.getPlacementMode(supporter.type, newType);
+    var axis = AutoLayoutConstraintModel.getSymmetryAxis();
+
+    var baseLeft = supporter.x;
+    var baseRight = supporter.x + sSize.w;
+    var baseCenter = supporter.x + sSize.w / 2;
+    var newHalfW = nSize.w / 2;
+
+    var candidateX = [];
+
+    if (["华拱", "昂", "耍头"].includes(newType)) {
+      candidateX.push(baseCenter - newHalfW);
+      candidateX.push(baseLeft + sSize.w * 0.15 - newHalfW);
+      candidateX.push(baseRight - sSize.w * 0.15 - newHalfW);
+      candidateX.push(baseLeft + sSize.w * 0.35 - newHalfW);
+      candidateX.push(baseRight - sSize.w * 0.35 - newHalfW);
+      candidateX.push(axis - newHalfW);
+
+      var spread = Math.max(sSize.w * 0.6, 120);
+      candidateX.push(axis - spread * 0.5 - newHalfW);
+      candidateX.push(axis + spread * 0.5 - newHalfW);
+      candidateX.push(axis - spread - newHalfW);
+      candidateX.push(axis + spread - newHalfW);
+    }
+
+    if (newType === "散斗") {
+      candidateX.push(baseCenter - newHalfW);
+      candidateX.push(baseLeft + AutoLayoutConstraintModel.END_OFFSET - newHalfW);
+      candidateX.push(baseRight - AutoLayoutConstraintModel.END_OFFSET - newHalfW);
+      candidateX.push(baseLeft + sSize.w * 0.25 - newHalfW);
+      candidateX.push(baseRight - sSize.w * 0.25 - newHalfW);
+      candidateX.push(axis - newHalfW);
+
+      var offsetSteps = [40, 60, 80, 100, 120, 140];
+      for (var os = 0; os < offsetSteps.length; os++) {
+        candidateX.push(axis - offsetSteps[os] - newHalfW);
+        candidateX.push(axis + offsetSteps[os] - newHalfW);
+      }
+    }
+
+    if (newType === "栌斗") {
+      candidateX.push(baseCenter - newHalfW);
+      candidateX.push(axis - newHalfW);
+    }
+
+    candidateX = candidateX.map(function(x) { return Math.round(x); });
+
+    var seen = {};
+    var uniqueX = [];
+    for (var i = 0; i < candidateX.length; i++) {
+      if (!seen[candidateX[i]]) {
+        seen[candidateX[i]] = true;
+        uniqueX.push(candidateX[i]);
+      }
+    }
+
+    for (var j = 0; j < uniqueX.length; j++) {
+      var x = uniqueX[j];
+      var direction = "正";
+      var centerX = x + newHalfW;
+      if (["昂", "耍头", "华拱"].includes(newType)) {
+        if (Math.abs(centerX - axis) < 20) direction = "正";
+        else if (centerX < axis) direction = "左挑";
+        else direction = "右挑";
+      }
+      positions.push({ x: x, y: y, dir: direction });
+    }
+
+    var validPositions = [];
+    for (var k = 0; k < positions.length; k++) {
+      var testPart = makePart(newType, positions[k].x, positions[k].y, layer, positions[k].dir);
+      if (!AutoLayoutConstraintModel.isValidPlacement(testPart, existingScheme)) continue;
+
+      var supporterCheck = AutoLayoutConstraintModel.findBestSupporter(testPart, existingScheme, true);
+      if (!supporterCheck || supporterCheck.overlapX < 12) continue;
+
+      validPositions.push(positions[k]);
+    }
+
+    return validPositions;
+  }
+
+  function collectCandidatesForLayer(layer, allLowerParts, existingScheme, partsPerLayer, symmetric) {
     var preferredTypes = AutoLayoutConstraintModel.getPreferredTypes(layer);
     var candidates = [];
-    var usedSupporterSlots = {};
+    var existingOnLayer = existingScheme.filter(function(p) { return p.layer === layer; }).length;
+    var densityBonus = calcLayerDensityWeights(partsPerLayer, existingOnLayer, layer);
 
-    for (var si = 0; si < supporters.length; si++) {
-      var supporter = supporters[si];
+    var supporterPool = allLowerParts.slice();
+
+    if (layer > 3) {
+      var extraLayers = existingScheme.filter(function(p) {
+        return p.layer < layer && p.layer >= layer - 3;
+      });
+      for (var e = 0; e < extraLayers.length; e++) {
+        if (!supporterPool.includes(extraLayers[e])) {
+          supporterPool.push(extraLayers[e]);
+        }
+      }
+    }
+
+    var centerAxis = AutoLayoutConstraintModel.getSymmetryAxis();
+
+    for (var si = 0; si < supporterPool.length; si++) {
+      var supporter = supporterPool[si];
 
       for (var ti = 0; ti < preferredTypes.length; ti++) {
         var newType = preferredTypes[ti];
 
         if (!AssemblyRules.canSupport(supporter.type, newType)) continue;
 
-        var slotKey = supporter.id + "->" + newType;
-        if (usedSupporterSlots[slotKey]) continue;
-
-        var positions = AutoLayoutConstraintModel.calcPositions(newType, supporter, existingScheme.concat(candidates));
+        var positions = collectExtendedCandidatePositions(newType, supporter, existingScheme.concat(candidates), layer);
 
         for (var pi = 0; pi < positions.length; pi++) {
           var pos = positions[pi];
@@ -38,137 +148,184 @@ const AutoLayoutEngine = (function() {
             continue;
           }
 
-          if (!AutoLayoutConstraintModel.hasAdequateSupport(candidate, existingScheme.concat(candidates))) {
-            continue;
-          }
+          var directSupporter = AutoLayoutConstraintModel.findBestSupporter(candidate, existingScheme.concat(candidates), true);
+          if (!directSupporter || directSupporter.overlapX < 12) continue;
 
-          candidate._supporterId = supporter.id;
-          candidate._supporterType = supporter.type;
+          var nSize = AssemblyRules.getSize(candidate.type);
+          var cCenterX = candidate.x + nSize.w / 2;
+          var distFromAxis = Math.abs(cCenterX - centerAxis);
+
+          var typeMatchBonus = (layer % 2 === 0 && ["华拱", "昂"].includes(newType)) ? 40 :
+                               (layer % 2 === 1 && ["散斗", "耍头"].includes(newType)) ? 40 : 0;
+
+          candidate._supporterId = directSupporter.part.id;
+          candidate._supporterLayer = directSupporter.part.layer;
+          candidate._supportScore = directSupporter.score;
+          candidate._isDirectLayer = directSupporter.isDirectLayer;
           candidate._priority = ti;
-          candidate._supportScore = AutoLayoutConstraintModel.findBestSupporter(
-            candidate, existingScheme.concat(candidates)
-          ) ? AutoLayoutConstraintModel.findBestSupporter(candidate, existingScheme.concat(candidates)).score : 0;
-          candidates.push(candidate);
-        }
+          candidate._typeBonus = typeMatchBonus;
+          candidate._axisDist = distFromAxis;
+          candidate._densityBonus = densityBonus;
+          candidate._combinedScore =
+            typeMatchBonus +
+            directSupporter.score * 0.5 +
+            (directSupporter.isDirectLayer ? 80 : 0) +
+            densityBonus * 30 -
+            ti * 20 -
+            distFromAxis * 0.08;
 
-        if (positions.length > 0) usedSupporterSlots[slotKey] = true;
+          var isDuplicate = candidates.some(function(c) {
+            return c.type === candidate.type &&
+                   Math.abs(c.x - candidate.x) < 25 &&
+                   Math.abs(c.y - candidate.y) < 15;
+          });
+          if (!isDuplicate) {
+            candidates.push(candidate);
+          }
+        }
       }
     }
 
     return candidates;
   }
 
-  function scoreCandidate(candidate, existingScheme) {
-    var score = 0;
-
-    score -= candidate._priority * 50;
-
-    var supporter = AutoLayoutConstraintModel.findBestSupporter(candidate, existingScheme);
-    if (supporter) {
-      score += supporter.score;
-      if (supporter.isEnough) score += 200;
-    }
-
-    var axis = AutoLayoutConstraintModel.getSymmetryAxis();
-    var nSize = AssemblyRules.getSize(candidate.type);
-    var cCenterX = candidate.x + nSize.w / 2;
-    var distFromAxis = Math.abs(cCenterX - axis);
-    score -= distFromAxis * 0.1;
-
-    if (candidate.layer % 2 === 0) {
-      if (["华拱", "昂", "耍头"].includes(candidate.type)) score += 30;
-    } else {
-      if (["散斗", "耍头"].includes(candidate.type)) score += 30;
-    }
-
-    return score;
-  }
-
-  function selectOptimalCandidates(candidates, partsPerLayer, symmetric, existingScheme) {
+  function selectCandidatesWithQuantity(candidates, partsPerLayer, symmetric, existingScheme) {
     if (candidates.length === 0) return [];
 
-    candidates.forEach(function(c) {
-      c._combinedScore = scoreCandidate(c, existingScheme.concat(candidates));
-    });
+    var target = partsPerLayer;
+    var axis = AutoLayoutConstraintModel.getSymmetryAxis();
 
     candidates.sort(function(a, b) {
       if (b._combinedScore !== a._combinedScore) return b._combinedScore - a._combinedScore;
-      return a.x - b.x;
+      return a._axisDist - b._axisDist;
     });
 
-    var maxPrimary = symmetric ? Math.ceil(partsPerLayer / 2) : partsPerLayer;
     var selected = [];
-    var axis = AutoLayoutConstraintModel.getSymmetryAxis();
-    var selectedAxes = new Set();
+    var selectedCenters = new Set();
+    var maxPrimary = symmetric ? Math.max(2, Math.ceil(target / 2) + 2) : target;
+    var centerBias = [];
+    var offCenterBias = [];
+    var nSize;
 
-    for (var i = 0; i < candidates.length; i++) {
-      if (selected.length >= maxPrimary) break;
+    for (var ci = 0; ci < candidates.length; ci++) {
+      nSize = AssemblyRules.getSize(candidates[ci].type);
+      var c = candidates[ci];
+      var cCenter = Math.round(c.x + nSize.w / 2);
+      var isOnAxis = Math.abs(cCenter - axis) < 15;
+      if (isOnAxis) centerBias.push(c);
+      else offCenterBias.push(c);
+    }
 
-      var c = candidates[i];
-      var nSize = AssemblyRules.getSize(c.type);
-      var cCenterX = c.x + nSize.w / 2;
-      var isOnAxis = Math.abs(cCenterX - axis) < 5;
+    var orderedCandidates = centerBias.concat(offCenterBias);
+    var processedX = new Set();
+    var minGapByType = { "栌斗": 55, "华拱": 90, "昂": 75, "耍头": 65, "散斗": 35 };
 
-      var hasConflict = selected.some(function(s) {
-        return !AutoLayoutConstraintModel.isValidPlacement(c, existingScheme.concat(selected));
-      });
-      if (hasConflict) continue;
+    var attempt = 0;
+    var selectionStrategies = [
+      { gapScale: 1.0, requireSupport: true, maxDuplicateType: 4 },
+      { gapScale: 0.75, requireSupport: true, maxDuplicateType: 6 },
+      { gapScale: 0.6, requireSupport: false, maxDuplicateType: 8 },
+      { gapScale: 0.4, requireSupport: false, maxDuplicateType: 12 }
+    ];
 
-      if (!isOnAxis && symmetric) {
-        var mirroredCenter = 2 * axis - cCenterX;
-        var mirrorKey = Math.round(mirroredCenter);
-        if (selectedAxes.has(mirrorKey)) continue;
+    while (selected.length < maxPrimary && attempt < selectionStrategies.length) {
+      var strategy = selectionStrategies[attempt];
+
+      for (var i = 0; i < orderedCandidates.length && selected.length < maxPrimary; i++) {
+        var c = orderedCandidates[i];
+
+        nSize = AssemblyRules.getSize(c.type);
+        var cCenterX = Math.round(c.x + nSize.w / 2);
+        var minGap = (minGapByType[c.type] || 40) * strategy.gapScale;
+
+        var hasConflict = false;
+        for (var sc = 0; sc < selected.length; sc++) {
+          var sel = selected[sc];
+          var selSize = AssemblyRules.getSize(sel.type);
+          var selCenter = Math.round(sel.x + selSize.w / 2);
+
+          if (c.type === sel.type) {
+            var gap = Math.abs(selCenter - cCenterX);
+            if (gap < minGap) { hasConflict = true; break; }
+          }
+
+          if (!AutoLayoutConstraintModel.isValidPlacement(c, existingScheme.concat([sel]))) {
+            hasConflict = true;
+            break;
+          }
+        }
+        if (hasConflict) continue;
+
+        if (strategy.requireSupport) {
+          var hasSup = AutoLayoutConstraintModel.hasAdequateSupport(c, existingScheme.concat(selected));
+          if (!hasSup) {
+            var bestSup = AutoLayoutConstraintModel.findBestSupporter(c, existingScheme.concat(selected), false);
+            if (!bestSup || bestSup.overlapX < 10) continue;
+          }
+        }
+
+        var isOnAxis2 = Math.abs(cCenterX - axis) < 15;
+        var selectedAlready = selected.some(function(s) {
+          return s.type === c.type && Math.abs(s.x - c.x) < minGap * 0.6;
+        });
+        if (selectedAlready) continue;
+
+        var typeCount = selected.filter(function(s) { return s.type === c.type; }).length;
+        if (typeCount >= strategy.maxDuplicateType) continue;
+
+        selected.push(c);
+        selectedCenters.add(Math.round(cCenterX / 5) * 5);
       }
 
-      var hasAdequate = AutoLayoutConstraintModel.hasAdequateSupport(c, existingScheme.concat(selected));
-      if (!hasAdequate) continue;
-
-      if (isOnAxis) {
-        selectedAxes.add(Math.round(cCenterX));
-      } else if (symmetric) {
-        selectedAxes.add(Math.round(cCenterX));
-      }
-
-      selected.push(c);
+      attempt++;
     }
 
     return selected;
   }
 
-  function addSymmetryMirrors(selected, existingScheme) {
+  function addSymmetryMirrorsWithCheck(selected, existingScheme, partsPerLayer) {
     var result = selected.slice();
     var axis = AutoLayoutConstraintModel.getSymmetryAxis();
+    var currentCount = result.length;
+    var maxTotal = partsPerLayer;
 
-    for (var i = 0; i < selected.length; i++) {
+    for (var i = 0; i < selected.length && currentCount < maxTotal; i++) {
       var mirrored = AutoLayoutConstraintModel.mirrorPart(selected[i]);
       if (!mirrored) continue;
 
       var nSize = AssemblyRules.getSize(mirrored.type);
       var cCenterX = mirrored.x + nSize.w / 2;
-      var isOnAxis = Math.abs(cCenterX - axis) < 5;
+      var isOnAxis = Math.abs(cCenterX - axis) < 15;
       if (isOnAxis) continue;
 
       var alreadyMirrored = result.some(function(r) {
         return r.id === mirrored.id || (
           r.type === mirrored.type &&
           r.layer === mirrored.layer &&
-          Math.abs(r.x - mirrored.x) < 10
+          Math.abs(r.x - mirrored.x) < 30
         );
       });
       if (alreadyMirrored) continue;
 
-      if (!AutoLayoutConstraintModel.isValidPlacement(mirrored, existingScheme.concat(result))) {
-        continue;
+      var conflict = false;
+      for (var j = 0; j < result.length; j++) {
+        if (!AutoLayoutConstraintModel.isValidPlacement(mirrored, existingScheme.concat([result[j]]))) {
+          conflict = true;
+          break;
+        }
       }
+      if (conflict) continue;
 
       if (!AutoLayoutConstraintModel.hasAdequateSupport(mirrored, existingScheme.concat(result))) {
         continue;
       }
 
       mirrored._supporterId = selected[i]._supporterId;
-      mirrored._priority = selected[i]._priority;
+      mirrored._combinedScore = (selected[i]._combinedScore || 50) - 5;
       result.push(mirrored);
+      currentCount++;
     }
+
     return result;
   }
 
@@ -179,59 +336,103 @@ const AutoLayoutEngine = (function() {
     }
   }
 
-  function tryFillLayer(layer, currentScheme, partsPerLayer, symmetric, maxAttempts) {
-    var supporters = currentScheme.filter(function(p) { return p.layer === layer - 1; });
-    if (supporters.length === 0) return [];
-
-    var bestResult = null;
+  function tryFillLayerStrict(layer, allScheme, partsPerLayer, symmetric, maxAttempts) {
+    var currentLayerParts = allScheme.filter(function(p) { return p.layer === layer; });
+    var bestResult = currentLayerParts.slice();
     var bestScore = -Infinity;
+    var target = partsPerLayer;
+    if (layer === 1) target = 1;
 
-    for (var attempt = 0; attempt < maxAttempts; attempt++) {
-      var candidates = collectCandidatesForLayer(layer, supporters, currentScheme, partsPerLayer, symmetric);
-      if (candidates.length === 0) continue;
+    var supporterRangeStrategies = [1, 2, 3];
+    var strictnessModes = ["strict", "normal", "loose"];
 
-      var selected = selectOptimalCandidates(candidates, partsPerLayer, symmetric, currentScheme);
-
-      if (symmetric) {
-        selected = addSymmetryMirrors(selected, currentScheme);
-      }
-
-      if (selected.length > partsPerLayer) {
-        selected.sort(function(a, b) {
-          return (b._combinedScore || 0) - (a._combinedScore || 0);
+    for (var sri = 0; sri < supporterRangeStrategies.length; sri++) {
+      for (var mode = 0; mode < strictnessModes.length; mode++) {
+        var maxLayerDist = supporterRangeStrategies[sri];
+        var strictMode = strictnessModes[mode];
+        var allLowerParts = allScheme.filter(function(p) {
+          return p.layer < layer && p.layer >= layer - maxLayerDist;
         });
-        selected = selected.slice(0, partsPerLayer);
-      }
 
-      var quickCheck = AutoLayoutConflictDetector.quickCheck(currentScheme.concat(selected));
-      var score = selected.length * 100 - quickCheck.total * 50;
+        if (allLowerParts.length === 0) continue;
 
-      if (score > bestScore) {
-        bestScore = score;
-        bestResult = selected.slice();
-      }
+        var workingScheme = allScheme.filter(function(p) { return p.layer !== layer; });
+        workingScheme = workingScheme.concat(bestResult);
 
-      if (quickCheck.total === 0 && selected.length >= Math.min(partsPerLayer, 2)) {
-        break;
+        var candidates = collectCandidatesForLayer(
+          layer, allLowerParts, workingScheme, partsPerLayer, symmetric
+        );
+
+        if (candidates.length === 0) continue;
+
+        var selected = selectCandidatesWithQuantity(candidates, partsPerLayer, symmetric, workingScheme);
+
+        if (symmetric) {
+          selected = addSymmetryMirrorsWithCheck(selected, workingScheme, partsPerLayer);
+        }
+
+        if (selected.length > target) {
+          selected.sort(function(a, b) {
+            return (b._combinedScore || 0) - (a._combinedScore || 0);
+          });
+          selected = selected.slice(0, target);
+        }
+
+        var filledScheme = workingScheme.concat(selected);
+        var quickCheck = AutoLayoutConflictDetector.quickCheck(filledScheme);
+        var layerCount = selected.length;
+
+        var quantityWeight = strictMode === "strict" ? 250 : (strictMode === "normal" ? 200 : 150);
+        var penaltyWeight = strictMode === "strict" ? 80 : (strictMode === "normal" ? 40 : 15);
+
+        var quantityScore = layerCount >= target ? quantityWeight : (layerCount / target) * quantityWeight;
+        var qualityBonus = 0;
+        if (quickCheck.isClean) qualityBonus += 80;
+        qualityBonus -= quickCheck.overlap * penaltyWeight;
+        qualityBonus -= quickCheck.suspension * penaltyWeight * 1.5;
+        qualityBonus -= quickCheck.insufficientSupport * (penaltyWeight * 0.5);
+
+        var score = quantityScore + qualityBonus + qualityBonus;
+
+        var meetsTarget = layerCount >= target;
+        var acceptableQuality = strictMode !== "strict" || quickCheck.total <= 2;
+        var isBest = score > bestScore || (meetsTarget && acceptableQuality && bestResult.length < target);
+
+        if (isBest) {
+          bestScore = score;
+          bestResult = selected.slice();
+        }
+
+        if (layerCount >= target && quickCheck.total <= 1) {
+          return bestResult;
+        }
+        if (meetsTarget && acceptableQuality) {
+          break;
+        }
       }
+      if (bestResult.length >= target) break;
     }
 
-    return bestResult || [];
+    return bestResult;
   }
 
-  function postProcessScheme(scheme) {
+  function postProcessFullScheme(scheme, config) {
     var processed = scheme.map(function(p) { return Object.assign({}, p); });
+    var targetLayers = config.targetLayers;
+    var partsPerLayer = config.partsPerLayer;
 
-    for (var i = 0; i < processed.length; i++) {
-      if (processed[i].layer > 1) {
-        var best = AutoLayoutConstraintModel.findBestSupporter(processed[i], processed);
-        if (best) {
-          var nSize = AssemblyRules.getSize(processed[i].type);
-          var sSize = AssemblyRules.getSize(best.part.type);
-          var targetY = AutoLayoutConstraintModel.calcY(best.part.y, sSize.h, nSize.h);
+    for (var pass = 0; pass < 2; pass++) {
+      for (var i = 0; i < processed.length; i++) {
+        if (processed[i].layer > 1) {
+          var best = AutoLayoutConstraintModel.findBestSupporter(processed[i], processed, true);
+          if (best && best.part) {
+            var nSize = AssemblyRules.getSize(processed[i].type);
+            var sSize = AssemblyRules.getSize(best.part.type);
+            var targetY = AutoLayoutConstraintModel.calcY(best.part.y, sSize.h, nSize.h);
 
-          if (Math.abs(processed[i].y - targetY) > 5) {
-            processed[i].y = targetY;
+            if (Math.abs(processed[i].y - targetY) > 3) {
+              processed[i].y = targetY;
+            }
           }
         }
       }
@@ -261,20 +462,13 @@ const AutoLayoutEngine = (function() {
     );
     scheme.push(ludou);
 
-    for (var layer = 2; layer <= targetLayers; layer++) {
-      var selected = tryFillLayer(layer, scheme, partsPerLayer, symmetric, 3);
+    var lastLayerWithParts = 1;
 
-      if (selected.length === 0 && layer > 3) {
-        var extendedSupporters = scheme.filter(function(p) {
-          return p.layer >= layer - 2 && p.layer < layer;
-        });
-        if (extendedSupporters.length > 0) {
-          var candidates = collectCandidatesForLayer(layer, extendedSupporters, scheme, partsPerLayer, symmetric);
-          selected = selectOptimalCandidates(candidates, partsPerLayer, symmetric, scheme);
-          if (symmetric) {
-            selected = addSymmetryMirrors(selected, scheme);
-          }
-        }
+    for (var layer = 2; layer <= targetLayers; layer++) {
+      var selected = tryFillLayerStrict(layer, scheme, partsPerLayer, symmetric, 4);
+
+      if (selected.length === 0) {
+        selected = fallbackFillLayer(layer, scheme, partsPerLayer, symmetric);
       }
 
       if (selected.length === 0) {
@@ -285,75 +479,228 @@ const AutoLayoutEngine = (function() {
 
       for (var i = 0; i < selected.length; i++) {
         delete selected[i]._supporterId;
-        delete selected[i]._supporterType;
-        delete selected[i]._priority;
+        delete selected[i]._supporterLayer;
         delete selected[i]._supportScore;
+        delete selected[i]._isDirectLayer;
+        delete selected[i]._priority;
+        delete selected[i]._typeBonus;
+        delete selected[i]._axisDist;
+        delete selected[i]._densityBonus;
         delete selected[i]._combinedScore;
         scheme.push(selected[i]);
       }
+
+      lastLayerWithParts = layer;
     }
 
-    scheme = postProcessScheme(scheme);
+    scheme = postProcessFullScheme(scheme, config);
 
     return scheme;
   }
 
+  function fallbackFillLayer(layer, existingScheme, partsPerLayer, symmetric) {
+    var preferredTypes = AutoLayoutConstraintModel.getPreferredTypes(layer);
+    var allLowerParts = existingScheme.filter(function(p) {
+      return p.layer >= Math.max(1, layer - 3) && p.layer < layer;
+    });
+    if (allLowerParts.length === 0) return [];
+
+    var axis = AutoLayoutConstraintModel.getSymmetryAxis();
+    var candidates = [];
+
+    for (var si = 0; si < allLowerParts.length; si++) {
+      var supp = allLowerParts[si];
+
+      for (var ti = 0; ti < preferredTypes.length; ti++) {
+        var nType = preferredTypes[ti];
+        if (!AssemblyRules.canSupport(supp.type, nType)) continue;
+
+        var sSize = AssemblyRules.getSize(supp.type);
+        var nSize = AssemblyRules.getSize(nType);
+        var y = AutoLayoutConstraintModel.calcY(supp.y, sSize.h, nSize.h);
+
+        var xPositions = [];
+        var sLeft = supp.x;
+        var sRight = supp.x + sSize.w;
+        var sCenter = supp.x + sSize.w / 2;
+
+        xPositions.push(sCenter - nSize.w / 2);
+        xPositions.push(sLeft + sSize.w * 0.1 - nSize.w / 2);
+        xPositions.push(sLeft + sSize.w * 0.2 - nSize.w / 2);
+        xPositions.push(sLeft + sSize.w * 0.3 - nSize.w / 2);
+        xPositions.push(sRight - sSize.w * 0.1 - nSize.w / 2);
+        xPositions.push(sRight - sSize.w * 0.2 - nSize.w / 2);
+        xPositions.push(sRight - sSize.w * 0.3 - nSize.w / 2);
+        xPositions.push(sLeft - nSize.w * 0.2);
+        xPositions.push(sLeft - nSize.w * 0.6);
+        xPositions.push(sLeft - nSize.w * 1.1);
+        xPositions.push(sRight - nSize.w * 0.8);
+        xPositions.push(sRight - nSize.w * 0.4);
+        xPositions.push(sRight + nSize.w * 0.1);
+        xPositions.push(axis - nSize.w / 2);
+        xPositions.push(axis - 30 - nSize.w / 2);
+        xPositions.push(axis + 30 - nSize.w / 2);
+        xPositions.push(axis - 60 - nSize.w / 2);
+        xPositions.push(axis + 60 - nSize.w / 2);
+        xPositions.push(axis - 90 - nSize.w / 2);
+        xPositions.push(axis + 90 - nSize.w / 2);
+        xPositions.push(axis - 120 - nSize.w / 2);
+        xPositions.push(axis + 120 - nSize.w / 2);
+        xPositions.push(axis - 150 - nSize.w / 2);
+        xPositions.push(axis + 150 - nSize.w / 2);
+        xPositions.push(axis - 180 - nSize.w / 2);
+        xPositions.push(axis + 180 - nSize.w / 2);
+        xPositions.push(axis - 210 - nSize.w / 2);
+        xPositions.push(axis + 210 - nSize.w / 2);
+
+        xPositions = xPositions.map(function(x) { return Math.round(x); });
+        var seen = {};
+        xPositions = xPositions.filter(function(x) {
+          if (seen[x]) return false;
+          seen[x] = true;
+          return true;
+        });
+
+        for (var xi = 0; xi < xPositions.length; xi++) {
+          var dir = "正";
+          var centerX = xPositions[xi] + nSize.w / 2;
+          if (["昂", "耍头", "华拱"].includes(nType)) {
+            if (centerX < axis - 20) dir = "左挑";
+            else if (centerX > axis + 20) dir = "右挑";
+          }
+
+          var cand = makePart(nType, xPositions[xi], y, layer, dir);
+          if (!AutoLayoutConstraintModel.isValidPlacement(cand, existingScheme.concat(candidates))) continue;
+
+          var allSup = AutoLayoutConstraintModel.findAllSupporters(cand, existingScheme.concat(candidates));
+          var directSup = allSup.filter(function(s) { return s.isDirectLayer; });
+          var useSup = directSup.length > 0 ? directSup : allSup;
+          if (useSup.length === 0) continue;
+
+          var totalOverlap = useSup.reduce(function(acc, s) { return acc + s.overlapX; }, 0);
+          var overlapRatio = nSize.w > 0 ? totalOverlap / nSize.w : 0;
+
+          if (totalOverlap < 14 && overlapRatio < 0.22) continue;
+
+          var primaryScore = useSup.length > 0 ? useSup[0].score : 0;
+          cand._combinedScore = primaryScore * 1.0 + totalOverlap * 0.5 - (overlapRatio < 0.3 ? 100 : 0);
+          cand._axisDist = Math.abs(centerX - axis);
+          cand._totalOverlap = totalOverlap;
+          candidates.push(cand);
+        }
+      }
+    }
+
+    candidates.sort(function(a, b) {
+      if (b._combinedScore !== a._combinedScore) return (b._combinedScore || 0) - (a._combinedScore || 0);
+      return (a._axisDist || 0) - (b._axisDist || 0);
+    });
+
+    var maxSelect = symmetric ? Math.ceil(partsPerLayer / 2) + 3 : partsPerLayer;
+    var selected = [];
+    var minGap = { "栌斗": 48, "华拱": 75, "昂": 65, "耍头": 55, "散斗": 28 };
+
+    for (var ci = 0; ci < candidates.length && selected.length < maxSelect; ci++) {
+      var c = candidates[ci];
+      var cSize = AssemblyRules.getSize(c.type);
+      var cCenter = c.x + cSize.w / 2;
+      var typeMinGap = minGap[c.type] || 30;
+
+      var conflict = false;
+      for (var si = 0; si < selected.length; si++) {
+        var s = selected[si];
+        var sSize = AssemblyRules.getSize(s.type);
+        var sCenter = s.x + sSize.w / 2;
+        if (s.type === c.type && Math.abs(sCenter - cCenter) < typeMinGap * 0.6) { conflict = true; break; }
+        if (Math.abs(sCenter - cCenter) < 24) { conflict = true; break; }
+        if (!AutoLayoutConstraintModel.isValidPlacement(c, existingScheme.concat([s]))) { conflict = true; break; }
+      }
+      if (conflict) continue;
+
+      selected.push(c);
+    }
+
+    if (symmetric) {
+      selected = addSymmetryMirrorsWithCheck(selected, existingScheme, partsPerLayer);
+    }
+
+    if (selected.length > partsPerLayer) {
+      selected.sort(function(a, b) { return (b._combinedScore || 0) - (a._combinedScore || 0); });
+      selected = selected.slice(0, partsPerLayer);
+    }
+
+    return selected;
+  }
+
   function repairScheme(scheme, config) {
+    var originalScheme = scheme.slice().map(function(p) { return Object.assign({}, p); });
     var repaired = scheme.slice().map(function(p) { return Object.assign({}, p); });
     var targetLayers = config.targetLayers || 4;
     var partsPerLayer = config.partsPerLayer || 3;
     var symmetric = !!config.symmetric;
 
-    var byLayer = {};
-    for (var i = 0; i < repaired.length; i++) {
-      if (!byLayer[repaired[i].layer]) byLayer[repaired[i].layer] = [];
-      byLayer[repaired[i].layer].push(repaired[i]);
-    }
-
-    for (var j = 0; j < repaired.length; j++) {
-      if (repaired[j].layer > 1) {
-        var best = AutoLayoutConstraintModel.findBestSupporter(repaired[j], repaired);
-        if (best && best.part) {
-          var nSize = AssemblyRules.getSize(repaired[j].type);
-          var sSize = AssemblyRules.getSize(best.part.type);
-          repaired[j].y = AutoLayoutConstraintModel.calcY(best.part.y, sSize.h, nSize.h);
+    for (var pass = 0; pass < 2; pass++) {
+      for (var i = 0; i < repaired.length; i++) {
+        if (repaired[i].layer > 1) {
+          var best = AutoLayoutConstraintModel.findBestSupporter(repaired[i], repaired, true);
+          if (best && best.part) {
+            var nSize = AssemblyRules.getSize(repaired[i].type);
+            var sSize = AssemblyRules.getSize(best.part.type);
+            repaired[i].y = AutoLayoutConstraintModel.calcY(best.part.y, sSize.h, nSize.h);
+          }
         }
       }
     }
 
-    for (var k = 0; k < repaired.length; k++) {
-      repaired[k].connect = AutoLayoutConstraintModel.generateConnectString(
-        repaired[k],
-        repaired.filter(function(p) { return p.id !== repaired[k].id; })
+    for (var j = 0; j < repaired.length; j++) {
+      repaired[j].connect = AutoLayoutConstraintModel.generateConnectString(
+        repaired[j],
+        repaired.filter(function(p) { return p.id !== repaired[j].id; })
       );
     }
 
     if (symmetric) {
       var axis = AutoLayoutConstraintModel.getSymmetryAxis();
       var toAdd = [];
-      for (var m = 0; m < repaired.length; m++) {
-        var p = repaired[m];
-        var pSize = AssemblyRules.getSize(p.type);
-        var pCenter = p.x + pSize.w / 2;
-        if (Math.abs(pCenter - axis) < 5) continue;
+      var byLayer = {};
+      for (var k = 0; k < repaired.length; k++) {
+        var p = repaired[k];
+        if (!byLayer[p.layer]) byLayer[p.layer] = [];
+        byLayer[p.layer].push(p);
+      }
 
-        var hasPair = repaired.some(function(q) {
-          if (q.layer !== p.layer || q.type !== p.type || q.id === p.id) return false;
-          var qSize = AssemblyRules.getSize(q.type);
-          var qCenter = q.x + qSize.w / 2;
-          return Math.abs(qCenter - (2 * axis - pCenter)) < 15;
-        });
+      var layers = Object.keys(byLayer).map(Number).sort();
+      for (var li = 0; li < layers.length; li++) {
+        var layer = layers[li];
+        var parts = byLayer[layer];
 
-        if (!hasPair) {
-          var mirrored = AutoLayoutConstraintModel.mirrorPart(p);
-          if (mirrored && AutoLayoutConstraintModel.isValidPlacement(mirrored, repaired.concat(toAdd))) {
-            if (AutoLayoutConstraintModel.hasAdequateSupport(mirrored, repaired.concat(toAdd))) {
-              mirrored.connect = AutoLayoutConstraintModel.generateConnectString(mirrored, repaired.concat(toAdd));
-              toAdd.push(mirrored);
+        for (var m = 0; m < parts.length; m++) {
+          var part = parts[m];
+          var pSize = AssemblyRules.getSize(part.type);
+          var pCenter = part.x + pSize.w / 2;
+          if (Math.abs(pCenter - axis) < 15) continue;
+
+          var hasPair = repaired.some(function(q) {
+            if (q.layer !== part.layer || q.type !== part.type || q.id === part.id) return false;
+            var qSize = AssemblyRules.getSize(q.type);
+            var qCenter = q.x + qSize.w / 2;
+            return Math.abs(qCenter - (2 * axis - pCenter)) < 20;
+          });
+
+          if (!hasPair) {
+            var mirrored = AutoLayoutConstraintModel.mirrorPart(part);
+            if (mirrored && AutoLayoutConstraintModel.isValidPlacement(mirrored, repaired.concat(toAdd))) {
+              if (AutoLayoutConstraintModel.hasAdequateSupport(mirrored, repaired.concat(toAdd))) {
+                mirrored.connect = AutoLayoutConstraintModel.generateConnectString(
+                  mirrored, repaired.concat(toAdd)
+                );
+                toAdd.push(mirrored);
+              }
             }
           }
         }
       }
+
       repaired = repaired.concat(toAdd);
     }
 
