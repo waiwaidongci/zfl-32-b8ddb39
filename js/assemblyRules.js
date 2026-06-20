@@ -37,6 +37,8 @@ const AssemblyRules = {
   GAP_TOLERANCE_Y_MAX: 160,
   SAME_LAYER_OVERLAP_TOLERANCE_X: 28,
   SAME_LAYER_OVERLAP_TOLERANCE_Y: 28,
+  SAME_LAYER_CONNECTION_GAP_X: 90,
+  SAME_LAYER_CONNECTION_GAP_Y: 42,
   MAX_SUPPORT_SEARCH_LAYERS: 3,
 
   getSize(type) {
@@ -126,6 +128,16 @@ const AssemblyRules = {
     const minOverlapX = Math.min(this.SAME_LAYER_OVERLAP_TOLERANCE_X, minW * 0.45);
     const minOverlapY = Math.min(this.SAME_LAYER_OVERLAP_TOLERANCE_Y, minH * 0.6);
     return (overlapX > minOverlapX && overlapY > minOverlapY) || areaRatio > 0.35;
+  },
+
+  checkSameLayerConnection(rectA, rectB) {
+    const overlapX = Math.min(rectA.right, rectB.right) - Math.max(rectA.left, rectB.left);
+    const overlapY = Math.min(rectA.bottom, rectB.bottom) - Math.max(rectA.top, rectB.top);
+    const gapX = Math.max(rectA.left, rectB.left) - Math.min(rectA.right, rectB.right);
+    const gapY = Math.max(rectA.top, rectB.top) - Math.min(rectA.bottom, rectB.bottom);
+    const nearX = overlapX > -this.SAME_LAYER_CONNECTION_GAP_X || gapX < this.SAME_LAYER_CONNECTION_GAP_X;
+    const nearY = overlapY > -this.SAME_LAYER_CONNECTION_GAP_Y || gapY < this.SAME_LAYER_CONNECTION_GAP_Y;
+    return nearX && nearY;
   }
 };
 

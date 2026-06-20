@@ -55,8 +55,8 @@ const AssemblyChecker = {
       for (const mentionedType of mentionedTypes) {
         if (mentionedType === p.type) continue;
 
-        const exists = scheme.some(o => o.type === mentionedType && o.id !== p.id);
-        if (!exists) {
+        const candidates = scheme.filter(o => o.type === mentionedType && o.id !== p.id);
+        if (candidates.length === 0) {
           issues.push({
             partId: p.id,
             partType: p.type,
@@ -64,6 +64,16 @@ const AssemblyChecker = {
             severity: "warning",
             rule: "connect_mention_missing",
             message: p.type + "（第" + p.layer + "层）连接点「" + p.connect + "」提到的「" + mentionedType + "」在方案中不存在"
+          });
+        } else if (!candidates.some(o => this.partsCanConnectByPosition(p, o))) {
+          issues.push({
+            partId: p.id,
+            partType: p.type,
+            layer: p.layer,
+            relatedPartIds: candidates.map(o => o.id),
+            severity: "warning",
+            rule: "connect_mention_mismatch",
+            message: p.type + "（第" + p.layer + "层）连接点「" + p.connect + "」提到的「" + mentionedType + "」未与实际相邻或承托构件匹配"
           });
         }
       }
@@ -81,6 +91,23 @@ const AssemblyChecker = {
         }
       }
     }
+  },
+
+  partsCanConnectByPosition(part, target) {
+    const partRect = AssemblyRules.getRect(part);
+    const targetRect = AssemblyRules.getRect(target);
+    const layerDelta = part.layer - target.layer;
+
+    if (layerDelta > 0 && layerDelta <= AssemblyRules.MAX_SUPPORT_SEARCH_LAYERS) {
+      return AssemblyRules.checkSupportOverlap(partRect, targetRect).isSupported;
+    }
+    if (layerDelta < 0 && -layerDelta <= AssemblyRules.MAX_SUPPORT_SEARCH_LAYERS) {
+      return AssemblyRules.checkSupportOverlap(targetRect, partRect).isSupported;
+    }
+    if (layerDelta === 0) {
+      return AssemblyRules.checkSameLayerConnection(partRect, targetRect);
+    }
+    return false;
   },
 
   checkSupportAndSuspension(scheme, issues) {
