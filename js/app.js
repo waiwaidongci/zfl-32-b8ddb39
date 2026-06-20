@@ -16,6 +16,7 @@ const App = {
   scheme: [],
   selected: "",
   drag: null,
+  errorPartIds: [],
 
   init() {
     this.canvas = document.querySelector("#canvas");
@@ -68,7 +69,7 @@ const App = {
 
   renderAll(opts = {}) {
     if (!opts.editorOnly && !opts.treeAndChecksOnly) {
-      Renderer.render(this.canvas, this.scheme, this.selected, (id, ox, oy) => {
+      Renderer.render(this.canvas, this.scheme, this.selected, this.errorPartIds, (id, ox, oy) => {
         this.selected = id;
         this.drag = { id, ox, oy };
         this.renderAll();
@@ -84,8 +85,32 @@ const App = {
     );
     if (!opts.editorOnly) {
       Renderer.renderTree(this.tree, this.scheme);
-      Renderer.renderChecks(this.checks, this.scheme, this.parts);
+      const checkResult = Renderer.renderChecks(this.checks, this.scheme, this.parts,
+        id => this.selectPartById(id)
+      );
+      this.errorPartIds = checkResult.errorPartIds;
+      if (!opts.editorOnly && !opts.treeAndChecksOnly) {
+        Renderer.render(this.canvas, this.scheme, this.selected, this.errorPartIds, (id, ox, oy) => {
+          this.selected = id;
+          this.drag = { id, ox, oy };
+          this.renderAll();
+        });
+      }
     }
+  },
+
+  selectPartById(id) {
+    this.selected = id;
+    const part = this.scheme.find(p => p.id === id);
+    if (part) {
+      const rect = this.canvas.getBoundingClientRect();
+      const zoom = Number(this.zoomInput.value) / 100;
+      const partEl = this.canvas.querySelector('.part[data-id="' + id + '"]');
+      if (partEl) {
+        partEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+      }
+    }
+    this.renderAll();
   },
 
   addPart(type) {

@@ -1,31 +1,14 @@
-const PART_SIZES = {
-  "栌斗": { w: 74, h: 52 },
-  "华拱": { w: 124, h: 34 },
-  "昂": { w: 112, h: 28 },
-  "耍头": { w: 92, h: 32 },
-  "散斗": { w: 48, h: 38 }
-};
-
-function partsAreSupported(upper, lower) {
-  const us = PART_SIZES[upper.type] || { w: 60, h: 40 };
-  const ls = PART_SIZES[lower.type] || { w: 60, h: 40 };
-  const uLeft = upper.x, uRight = upper.x + us.w;
-  const lLeft = lower.x, lRight = lower.x + ls.w;
-  const overlapX = Math.min(uRight, lRight) - Math.max(uLeft, lLeft);
-  const uBottom = upper.y + us.h;
-  const lTop = lower.y;
-  const gapY = lTop - uBottom;
-  return overlapX > -12 && gapY > -20 && gapY < 80;
-}
-
 const Renderer = {
-  render(canvas, scheme, selected, onSelect) {
-    canvas.innerHTML = scheme.map(p =>
-      '<div class="part ' + p.type + ' ' + (p.id === selected ? 'selected' : '') +
-      '" data-id="' + p.id +
-      '" style="left:' + p.x + 'px;top:' + p.y + 'px;--explode:' + (-p.layer * 34) + 'px">' +
-      p.type + '</div>'
-    ).join("");
+  render(canvas, scheme, selected, errorPartIds, onSelect) {
+    const errorSet = new Set(errorPartIds || []);
+    canvas.innerHTML = scheme.map(p => {
+      const classes = ["part", p.type];
+      if (p.id === selected) classes.push("selected");
+      if (errorSet.has(p.id)) classes.push("has-error");
+      return '<div class="' + classes.join(" ") + '" data-id="' + p.id +
+        '" style="left:' + p.x + 'px;top:' + p.y + 'px;--explode:' + (-p.layer * 34) + 'px">' +
+        p.type + '</div>';
+    }).join("");
     canvas.querySelectorAll(".part").forEach(el => {
       el.onpointerdown = event => {
         const id = el.dataset.id;
@@ -71,25 +54,51 @@ const Renderer = {
     ).join("");
   },
 
-  renderChecks(checks, scheme, parts) {
-    const issues = [];
-    for (const p of scheme) {
-      if (p.layer > 1 && !scheme.some(o =>
-        o.layer === p.layer - 1 && partsAreSupported(p, o)
-      )) {
-        issues.push(p.type + "第" + p.layer + "层可能悬空");
-      }
-      if (!p.connect) {
-        issues.push(p.type + "缺少连接点");
-      }
+  renderChecks(checks, scheme, parts, onSelectPart) {
+    const result = AssemblyChecker.checkAll(scheme, parts);
+    const countsHtml = '<div class="item">' + result.counts + '</div>';
+
+    if (result.issues.length === 0) {
+      checks.innerHTML = countsHtml +
+        '<div class="item ok">装配关系暂未发现明显问题。</div>';
+      return { errorPartIds: [], warningPartIds: [] };
     }
-    const counts = parts.map(type =>
-      type + "：" + scheme.filter(p => p.type === type).length
-    ).join(" / ");
-    checks.innerHTML = '<div class="item">' + counts + '</div>' +
-      (issues.length
-        ? issues.map(i => '<div class="item bad">' + i + '</div>').join("")
-        : '<div class="item ok">装配关系暂未发现明显问题。</div>');
+
+    const errorPartIds = [];
+    const warningPartIds = [];
+
+    const issuesHtml = result.issues.map(issue => {
+      if (issue.severity === "error") {
+        errorPartIds.push(issue.partId);
+        if (issue.relatedPartIds) errorPartIds.push(...issue.relatedPartIds);
+      } else {
+        warningPartIds.push(issue.partId);
+        if (issue.relatedPartIds) warningPartIds.push(...issue.relatedPartIds);
+      }
+      const sevClass = issue.severity === "error" ? "bad" : "warn";
+      const sevLabel = issue.severity === "error" ? "错误" : "警告";
+      return '<div class="item issue-item ' + sevClass + '" data-part-id="' + issue.partId + '" title="点击定位此构件">' +
+        '<span class="sev-badge">' + sevLabel + '</span>' +
+        issue.message +
+        '</div>';
+    }).join("");
+
+    checks.innerHTML = countsHtml +
+      '<div class="checks-summary">发现 <b class="bad">' + result.errorCount + '</b> 个错误，<b class="warn">' + result.warningCount + '</b> 个警告</div>' +
+      issuesHtml;
+
+    checks.querySelectorAll(".issue-item").forEach(el => {
+      el.style.cursor = "pointer";
+      el.onclick = () => {
+        const id = el.dataset.partId;
+        if (id && onSelectPart) onSelectPart(id);
+      };
+    });
+
+    return {
+      errorPartIds: Array.from(new Set(errorPartIds)),
+      warningPartIds: Array.from(new Set(warningPartIds))
+    };
   },
 
   renderLibrary(library, parts, onAdd) {

@@ -20,6 +20,27 @@ label { display: block; margin: 9px 0 5px; color: #76695c; font-size: 13px; }
 .canvas { position: relative; width: 1200px; height: 760px; transform-origin: 0 0; background: linear-gradient(90deg, rgba(0,0,0,.05) 1px, transparent 1px), linear-gradient(rgba(0,0,0,.05) 1px, transparent 1px), #f6ead8; background-size: 40px 40px; border-radius: 8px; }
 .part { position: absolute; display: grid; place-items: center; color: #fff; font-weight: 800; cursor: move; border: 2px solid rgba(80,45,25,.35); box-shadow: 0 8px 18px rgba(60,35,20,.18); }
 .part.selected { outline: 4px solid rgba(219,170,64,.75); }
+.part.has-error { outline: 4px solid rgba(220,60,50,.85); animation: error-pulse 1.6s ease-in-out infinite; }
+@keyframes error-pulse {
+  0%, 100% { box-shadow: 0 8px 18px rgba(60,35,20,.18), 0 0 0 0 rgba(220,60,50,.55); }
+  50% { box-shadow: 0 8px 18px rgba(60,35,20,.18), 0 0 14px 4px rgba(220,60,50,.55); }
+}
+.checks-summary { padding: 8px 10px; font-size: 14px; color: #5a4e41; }
+.issue-item { transition: all 0.15s; }
+.issue-item:hover { border-color: #8d3d2d; background: #fff0eb; }
+.issue-item.bad { border-left: 4px solid #a1382f; }
+.issue-item.warn { border-left: 4px solid #b87d23; color: #7a5616; }
+.warn { color: #b87d23; }
+.sev-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  margin-right: 8px;
+  font-weight: 800;
+}
+.issue-item.bad .sev-badge { background: #a1382f; color: #fff; }
+.issue-item.warn .sev-badge { background: #b87d23; color: #fff; }
 .栌斗 { width: 74px; height: 52px; background: #8f4b31; border-radius: 8px; }
 .华拱 { width: 124px; height: 34px; background: #a96838; border-radius: 18px; }
 .昂 { width: 112px; height: 28px; background: #7d5b32; transform: skewX(-16deg); }
