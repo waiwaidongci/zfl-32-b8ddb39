@@ -2,7 +2,7 @@ const ImportValidator = {
   VALID_TYPES: ["栌斗", "华拱", "昂", "耍头", "散斗"],
   VALID_DIRS: ["正", "左挑", "右挑"],
   REQUIRED_FIELDS: ["type", "x", "y", "layer"],
-  MAX_LAYER: 8,
+  MAX_LAYER: 16,
   MIN_LAYER: 1,
 
   validate(parts, supportedTypes) {

@@ -119,32 +119,41 @@ const App = {
   },
 
   applyImportedScheme(parts) {
+    const MAX_LAYER = 16;
+    const MIN_LAYER = 1;
+    const VALID_DIRS = ["正", "左挑", "右挑"];
     this.scheme = parts.map(p => {
-      if (!p.id || p.id.trim() === "") {
-        p.id = crypto.randomUUID();
+      const item = { ...p };
+      if (!item.id || typeof item.id !== "string" || item.id.trim() === "") {
+        item.id = crypto.randomUUID();
       }
-      if (p.layer === undefined || p.layer === null || isNaN(Number(p.layer))) {
-        p.layer = 1;
+      if (item.layer === undefined || item.layer === null || isNaN(Number(item.layer))) {
+        item.layer = MIN_LAYER;
       } else {
-        p.layer = Math.min(8, Math.max(1, Math.round(Number(p.layer))));
+        const n = Math.round(Number(item.layer));
+        item.layer = (n < MIN_LAYER || n > MAX_LAYER) ? Math.min(MAX_LAYER, Math.max(MIN_LAYER, n)) : n;
       }
-      if (p.x === undefined || p.x === null || isNaN(Number(p.x))) {
-        p.x = 460 + Math.random() * 120;
+      if (item.x === undefined || item.x === null || isNaN(Number(item.x))) {
+        item.x = Math.round(460 + Math.random() * 120);
       } else {
-        p.x = Math.round(Number(p.x));
+        item.x = Math.round(Number(item.x));
       }
-      if (p.y === undefined || p.y === null || isNaN(Number(p.y))) {
-        p.y = 320 + Math.random() * 80;
+      if (item.y === undefined || item.y === null || isNaN(Number(item.y))) {
+        item.y = Math.round(320 + Math.random() * 80);
       } else {
-        p.y = Math.round(Number(p.y));
+        item.y = Math.round(Number(item.y));
       }
-      if (!p.dir || p.dir.trim() === "") {
-        p.dir = "正";
+      if (!item.dir || typeof item.dir !== "string" || !VALID_DIRS.includes(item.dir.trim())) {
+        item.dir = "正";
+      } else {
+        item.dir = item.dir.trim();
       }
-      if (p.connect === undefined || p.connect === null) {
-        p.connect = "";
+      if (item.connect === undefined || item.connect === null) {
+        item.connect = "";
+      } else {
+        item.connect = String(item.connect);
       }
-      return p;
+      return item;
     });
     this.selected = "";
     this.renderAll();

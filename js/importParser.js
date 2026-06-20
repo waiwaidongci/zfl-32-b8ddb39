@@ -2,7 +2,7 @@ const ImportParser = {
   REQUIRED_FIELDS: ["type", "x", "y", "layer"],
   OPTIONAL_FIELDS: ["id", "dir", "connect"],
   VALID_DIRS: ["正", "左挑", "右挑"],
-  MAX_LAYER: 8,
+  MAX_LAYER: 16,
   MIN_LAYER: 1,
 
   parseFile(file) {

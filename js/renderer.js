@@ -42,7 +42,7 @@ const Renderer = {
     }
     editor.innerHTML =
       '<div class="item"><b>' + p.type + '</b>' +
-      '<label>层级</label><input id="layerInput" type="number" min="1" max="8" value="' + p.layer + '">' +
+      '<label>层级</label><input id="layerInput" type="number" min="1" max="16" value="' + p.layer + '">' +
       '<label>方向</label><select id="dirInput"><option>正</option><option>左挑</option><option>右挑</option></select>' +
       '<label>连接点</label><input id="connectInput" value="' + p.connect + '">' +
       '<button id="deleteBtn" class="secondary">删除构件</button></div>';
