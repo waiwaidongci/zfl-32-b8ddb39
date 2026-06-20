@@ -19,7 +19,7 @@ const GeometryTransform = {
         x: newX,
         y: p.y,
         layer: p.layer,
-        dir: this._flipDir(p.dir),
+        dir: p.dir,
         connect: p.connect
       };
     }.bind(this));
@@ -46,12 +46,6 @@ const GeometryTransform = {
       });
     }
     return result;
-  },
-
-  _flipDir(dir) {
-    if (dir === "左挑") return "右挑";
-    if (dir === "右挑") return "左挑";
-    return dir;
   },
 
   _computeGroupCenterX(parts) {
