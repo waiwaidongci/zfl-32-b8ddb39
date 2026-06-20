@@ -1,0 +1,222 @@
+.canvas.measuring { cursor: crosshair; }
+.canvas.measuring .part { cursor: crosshair; }
+
+.annotation-overlay {
+  z-index: 10;
+}
+
+.annotation-line {
+  stroke: #db5a42;
+  stroke-width: 1.5;
+  stroke-dasharray: 6 3;
+  vector-effect: non-scaling-stroke;
+}
+.annotation-group.selected .annotation-line {
+  stroke-width: 2.5;
+  stroke: #e03020;
+}
+
+.annotation-preview-line {
+  stroke: #db5a42;
+  stroke-width: 1.5;
+  stroke-dasharray: 3 4;
+  opacity: 0.65;
+  vector-effect: non-scaling-stroke;
+}
+
+.annotation-preview-dot {
+  fill: rgba(219, 90, 66, 0.7);
+  stroke: #fff;
+  stroke-width: 1;
+}
+
+.annotation-tick {
+  stroke: #db5a42;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.annotation-group.selected .annotation-tick {
+  stroke: #e03020;
+  stroke-width: 2;
+}
+
+.annotation-dot {
+  fill: #db5a42;
+  stroke: #fff;
+  stroke-width: 1;
+}
+.annotation-group.selected .annotation-dot {
+  fill: #e03020;
+}
+
+.annotation-label-bg {
+  fill: rgba(255, 250, 240, 0.92);
+  stroke: #db5a42;
+  stroke-width: 0.5;
+}
+.annotation-group.selected .annotation-label-bg {
+  stroke: #e03020;
+}
+
+.annotation-preview-label-bg {
+  fill: rgba(255, 250, 240, 0.85);
+  stroke: rgba(219, 90, 66, 0.7);
+  stroke-width: 0.5;
+}
+
+.annotation-label {
+  font-size: 11px;
+  font-weight: 700;
+  fill: #8d3d2d;
+  font-family: Arial, "PingFang SC", sans-serif;
+}
+.annotation-group.selected .annotation-label {
+  fill: #e03020;
+}
+
+.annotation-preview-label {
+  font-size: 11px;
+  font-weight: 700;
+  fill: #8d3d2d;
+  font-family: Arial, "PingFang SC", sans-serif;
+  opacity: 0.85;
+}
+
+.annotation-pending-marker {
+  fill: rgba(219, 90, 66, 0.6);
+  stroke: #db5a42;
+  stroke-width: 1.5;
+}
+
+.annotation-pending-pulse {
+  fill: none;
+  stroke: #db5a42;
+  stroke-width: 1;
+  opacity: 0;
+  animation: annotation-pulse-anim 1.2s ease-out infinite;
+}
+
+@keyframes annotation-pulse-anim {
+  0% { r: 5; opacity: 0.7; }
+  100% { r: 18; opacity: 0; }
+}
+
+.measurement-status {
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.measurement-mode-indicator {
+  font-weight: 700;
+  color: #76695c;
+}
+.measurement-mode-indicator.active {
+  color: #8d3d2d;
+}
+
+.measurement-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #9a8c7e;
+  font-weight: 400;
+}
+
+.scale-setting {
+  margin: 10px 0;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid #e8dcc8;
+  border-radius: 6px;
+}
+
+.scale-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #5a4e41;
+}
+.scale-row input[type="number"] {
+  width: 64px;
+  text-align: center;
+  padding: 6px 4px;
+}
+.scale-row input[type="text"] {
+  width: 64px;
+  text-align: center;
+  padding: 6px 4px;
+}
+
+.annotation-list-header {
+  margin-top: 8px;
+}
+
+.annotation-list {
+  display: grid;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: 4px;
+  padding-right: 2px;
+}
+
+.annotation-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  border: 1px solid #d8cbb8;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.12s;
+  font-size: 12px;
+}
+.annotation-item:hover {
+  border-color: #8d3d2d;
+  background: #fff5e6;
+}
+.annotation-item.selected {
+  border-color: #8d3d2d;
+  background: #fff0e0;
+  box-shadow: 0 0 0 2px rgba(141, 61, 45, 0.12);
+}
+
+.ann-dist {
+  font-weight: 600;
+  color: #4a4035;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.ann-delete {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d8cbb8;
+  border-radius: 4px;
+  background: #fff;
+  color: #a1382f;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+.ann-delete:hover {
+  background: #a1382f;
+  color: #fff;
+  border-color: #a1382f;
+}
+
+.annotation-empty {
+  font-size: 12px;
+  color: #9a8c7e;
+  padding: 8px 4px;
+  text-align: center;
+}

@@ -14,12 +14,15 @@ const App = {
   importFileInput: null,
   playerControls: null,
   playerStepInfo: null,
+  measureBtn: null,
+  measurementPanel: null,
 
   scheme: [],
   selected: "",
   drag: null,
   errorPartIds: [],
   playerUnsubscribe: null,
+  measurementUnsubscribe: null,
 
   init() {
     this.canvas = document.querySelector("#canvas");
@@ -36,15 +39,31 @@ const App = {
     this.importFileInput = document.querySelector("#importFileInput");
     this.playerControls = document.querySelector("#playerControls");
     this.playerStepInfo = document.querySelector("#playerStepInfo");
+    this.measureBtn = document.querySelector("#measureBtn");
+    this.measurementPanel = document.querySelector("#measurementPanel");
 
     this.scheme = JSON.parse(localStorage.getItem("zfl32Scheme") || "null") || [
       { id: crypto.randomUUID(), type: "栌斗", x: 520, y: 520, layer: 1, dir: "正", connect: "柱头" },
       { id: crypto.randomUUID(), type: "华拱", x: 495, y: 450, layer: 2, dir: "正", connect: "下承" }
     ];
 
+    this.initMeasurement();
     this.bindEvents();
     this.initPlayer();
     this.renderAll();
+  },
+
+  initMeasurement() {
+    var saved = MeasurementSerializer.loadFromLocalStorage();
+    if (saved) {
+      MeasurementState.init(saved.annotations, saved.scale);
+    } else {
+      MeasurementState.init([], null);
+    }
+
+    this.measurementUnsubscribe = MeasurementState.subscribe(() => {
+      this.renderAll();
+    });
   },
 
   initPlayer() {
@@ -90,11 +109,18 @@ const App = {
     Renderer.renderTemplates(this.templateLibrary, DOUGONG_TEMPLATES, tplId => this.loadTemplate(tplId));
 
     window.onpointermove = event => {
+      var zoom = Number(this.zoomInput.value) / 100;
+      var rect = this.canvas.getBoundingClientRect();
+
+      if (MeasurementState.isActive && MeasurementState.pendingPoint && !AssemblyPlayerState.isActive) {
+        var hoverX = Math.round((event.clientX - rect.left) / zoom);
+        var hoverY = Math.round((event.clientY - rect.top) / zoom);
+        MeasurementState.setHoverPoint(hoverX, hoverY);
+      }
+
       if (!this.drag || AssemblyPlayerState.isActive) return;
-      const rect = this.canvas.getBoundingClientRect();
       const item = this.scheme.find(p => p.id === this.drag.id);
       if (!item) return;
-      const zoom = Number(this.zoomInput.value) / 100;
       item.x = Math.round((event.clientX - rect.left) / zoom - this.drag.ox);
       item.y = Math.round((event.clientY - rect.top) / zoom - this.drag.oy);
       this.renderAll();
@@ -107,14 +133,101 @@ const App = {
       this.drag = null;
     };
 
+    this.canvas.onclick = event => {
+      if (!MeasurementState.isActive) return;
+      if (AssemblyPlayerState.isActive) return;
+
+      var zoom = Number(this.zoomInput.value) / 100;
+      var rect = this.canvas.getBoundingClientRect();
+      var canvasX = Math.round((event.clientX - rect.left) / zoom);
+      var canvasY = Math.round((event.clientY - rect.top) / zoom);
+
+      var partEl = event.target.closest(".part");
+      if (partEl) {
+        var partId = partEl.dataset.id;
+        var part = this.scheme.find(p => p.id === partId);
+        if (part) {
+          canvasX = part.x + Math.round(partEl.offsetWidth / 2);
+          canvasY = part.y + Math.round(partEl.offsetHeight / 2);
+        }
+      }
+
+      if (!MeasurementState.pendingPoint) {
+        MeasurementState.setPendingPoint(canvasX, canvasY);
+      } else {
+        MeasurementState.addAnnotation(MeasurementState.pendingPoint, { x: canvasX, y: canvasY });
+      }
+    };
+
     this.zoomInput.oninput = e => this.canvas.style.transform = "scale(" + (Number(e.target.value) / 100) + ")";
     this.zoomInput.dispatchEvent(new Event("input"));
 
     this.explodeBtn.onclick = () => this.canvas.classList.toggle("exploded");
-    this.saveBtn.onclick = () => localStorage.setItem("zfl32Scheme", JSON.stringify(this.scheme));
+    this.saveBtn.onclick = () => {
+      localStorage.setItem("zfl32Scheme", JSON.stringify(this.scheme));
+      MeasurementSerializer.saveToLocalStorage(
+        MeasurementState.getAnnotations(),
+        MeasurementState.getScale()
+      );
+    };
     this.exportBtn.onclick = () => this.exportJSON();
     this.importBtn.onclick = () => this.importFileInput.click();
-    this.importFileInput.onchange = () => ImportUI.open(this.importFileInput, this.parts, parts => this.applyImportedScheme(parts));
+    this.importFileInput.onchange = () => {
+      var file = this.importFileInput.files[0];
+      if (file) {
+        var reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            var raw = JSON.parse(e.target.result);
+            this._pendingImportMeasurement = MeasurementSerializer.parseImportData(raw);
+          } catch (err) {
+            this._pendingImportMeasurement = null;
+          }
+        };
+        reader.readAsText(file, "utf-8");
+      }
+      ImportUI.open(this.importFileInput, this.parts, parts => this.applyImportedScheme(parts));
+    };
+
+    this.canvas.onpointerleave = () => {
+      if (MeasurementState.isActive && MeasurementState.hoverPoint) {
+        MeasurementState.setHoverPoint(null, null);
+      }
+    };
+
+    this.measureBtn.onclick = () => {
+      MeasurementState.toggleMode();
+      if (MeasurementState.isActive) {
+        this.canvas.classList.add("measuring");
+        this.measureBtn.classList.remove("secondary");
+        this.measureBtn.textContent = "退出测量";
+      } else {
+        this.canvas.classList.remove("measuring");
+        this.measureBtn.classList.add("secondary");
+        this.measureBtn.textContent = "测量模式";
+      }
+    };
+
+    window.onkeydown = event => {
+      if (event.key === "Escape" && MeasurementState.isActive) {
+        if (MeasurementState.pendingPoint) {
+          MeasurementState.clearPending();
+        } else {
+          MeasurementState.toggleMode();
+          this.canvas.classList.remove("measuring");
+          this.measureBtn.classList.add("secondary");
+          this.measureBtn.textContent = "测量模式";
+        }
+        event.preventDefault();
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && MeasurementState.selectedAnnotationId) {
+        if (document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
+          return;
+        }
+        MeasurementState.removeAnnotation(MeasurementState.selectedAnnotationId);
+        event.preventDefault();
+      }
+    };
   },
 
   renderAll(opts = {}) {
@@ -125,14 +238,25 @@ const App = {
       visiblePartIds: playerState.installedPartIds,
       currentPartId: playerState.currentStepInfo ? playerState.currentStepInfo.partId : null
     };
+    const measureState = MeasurementState.getState();
 
     if (!opts.editorOnly && !opts.treeAndChecksOnly) {
       Renderer.render(this.canvas, this.scheme, this.selected, this.errorPartIds, (id, ox, oy) => {
         if (AssemblyPlayerState.isActive) return;
+        if (MeasurementState.isActive) return;
         this.selected = id;
         this.drag = { id, ox, oy };
         this.renderAll();
       }, renderOpts);
+
+      AnnotationRenderer.render(this.canvas, measureState);
+
+      this.canvas.querySelectorAll(".annotation-group").forEach(el => {
+        el.onclick = event => {
+          event.stopPropagation();
+          MeasurementState.selectAnnotation(el.dataset.annotationId);
+        };
+      });
     }
 
     if (!isAssemblyMode) {
@@ -158,15 +282,15 @@ const App = {
         );
         this.errorPartIds = checkResult.errorPartIds;
       }
-      if (!opts.editorOnly && !opts.treeAndChecksOnly) {
-        Renderer.render(this.canvas, this.scheme, this.selected, this.errorPartIds, (id, ox, oy) => {
-          if (AssemblyPlayerState.isActive) return;
-          this.selected = id;
-          this.drag = { id, ox, oy };
-          this.renderAll();
-        }, renderOpts);
-      }
     }
+
+    AnnotationRenderer.renderMeasurementPanel(
+      this.measurementPanel,
+      measureState,
+      id => MeasurementState.removeAnnotation(id),
+      id => MeasurementState.selectAnnotation(id),
+      (px, unit) => MeasurementState.setScale(px, unit)
+    );
   },
 
   selectPartById(id) {
@@ -207,8 +331,13 @@ const App = {
   },
 
   exportJSON() {
-    const blob = new Blob([JSON.stringify(this.scheme, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
+    var data = MeasurementSerializer.buildExportData(
+      this.scheme,
+      MeasurementState.getAnnotations(),
+      MeasurementState.getScale()
+    );
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    var a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "dougong-scheme.json";
     a.click();
@@ -253,6 +382,15 @@ const App = {
       return item;
     });
     this.selected = "";
+
+    if (this._pendingImportMeasurement && this._pendingImportMeasurement.measurement) {
+      var m = this._pendingImportMeasurement.measurement;
+      MeasurementState.init(m.annotations, m.scale);
+    } else {
+      MeasurementState.init([], null);
+    }
+    this._pendingImportMeasurement = null;
+
     this.refreshPlayerSteps();
     this.renderAll();
   }

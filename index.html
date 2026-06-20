@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>古建筑斗拱拆解排布模拟</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/measurement.css">
   <link rel="stylesheet" href="css/import.css">
   <link rel="stylesheet" href="css/assemblyPlayer.css">
 </head>
@@ -22,6 +23,9 @@
       <h2>视图</h2>
       <button id="explodeBtn" class="secondary">切换爆炸图</button>
       <label>缩放</label><input id="zoom" type="range" min="45" max="110" value="75">
+      <h2>尺寸标注</h2>
+      <button id="measureBtn" class="secondary">测量模式</button>
+      <div id="measurementPanel"></div>
     </aside>
     <section class="panel canvasWrap">
       <div id="playerControls"></div>
@@ -41,6 +45,9 @@
   <script src="js/templates.js"></script>
   <script src="js/assemblyRules.js"></script>
   <script src="js/assemblyChecker.js"></script>
+  <script src="js/measurementState.js"></script>
+  <script src="js/measurementSerializer.js"></script>
+  <script src="js/annotationRenderer.js"></script>
   <script src="js/renderer.js"></script>
   <script src="js/assemblyStepCalculator.js"></script>
   <script src="js/assemblyPlayerState.js"></script>
