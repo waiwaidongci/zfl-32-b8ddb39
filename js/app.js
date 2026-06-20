@@ -138,9 +138,7 @@ const App = {
     if (!isAssemblyMode) {
       Renderer.renderEditor(this.editor, this.scheme, this.selected,
         editorOpts => {
-          if (!editorOpts || !editorOpts.treeAndChecksOnly) {
-            this.refreshPlayerSteps();
-          }
+          this.refreshPlayerSteps();
           this.renderAll(editorOpts || {});
         },
         id => {
