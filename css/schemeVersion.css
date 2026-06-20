@@ -63,6 +63,99 @@
   color: #252019;
 }
 
+.scheme-version-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.scheme-search-box {
+  flex: 1;
+  position: relative;
+  min-width: 160px;
+}
+
+.scheme-search-box input {
+  width: 100%;
+  padding: 7px 30px 7px 10px;
+  font-size: 13px;
+  border: 1px solid #d8cbb8;
+  border-radius: 6px;
+  background: #fff;
+  color: #252019;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.scheme-search-box input:focus {
+  border-color: #8d3d2d;
+}
+
+.scheme-search-box input::placeholder {
+  color: #a89888;
+}
+
+.scheme-search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: #d8cbb8;
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s;
+}
+
+.scheme-search-clear:hover {
+  background: #8d3d2d;
+}
+
+.scheme-sort-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.scheme-sort-box label {
+  font-size: 13px;
+  color: #76695c;
+  white-space: nowrap;
+}
+
+.scheme-sort-box select {
+  padding: 6px 8px;
+  font-size: 13px;
+  border: 1px solid #d8cbb8;
+  border-radius: 6px;
+  background: #fff;
+  color: #252019;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.scheme-sort-box select:focus {
+  border-color: #8d3d2d;
+}
+
+.scheme-sort-box select:hover {
+  border-color: #b8a898;
+}
+
 .scheme-version-list {
   display: grid;
   gap: 8px;
@@ -79,6 +172,28 @@
   background: #fff;
   border: 1px dashed #d8cbb8;
   border-radius: 8px;
+}
+
+.scheme-search-empty {
+  padding: 40px 16px;
+}
+
+.scheme-empty-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+
+.scheme-empty-title {
+  font-weight: 700;
+  font-size: 15px;
+  color: #252019;
+  margin-bottom: 6px;
+}
+
+.scheme-empty-desc {
+  font-size: 13px;
+  color: #76695c;
 }
 
 .scheme-item {
@@ -175,6 +290,23 @@ button.tiny.danger:hover {
   .scheme-version-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .scheme-version-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .scheme-search-box {
+    min-width: 100%;
+  }
+
+  .scheme-sort-box {
+    justify-content: space-between;
+  }
+
+  .scheme-sort-box select {
+    flex: 1;
   }
 
   .scheme-item {
