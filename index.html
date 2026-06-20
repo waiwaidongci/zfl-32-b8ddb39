@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>古建筑斗拱拆解排布模拟</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/import.css">
 </head>
 <body>
   <header>
     <div><h1>古建筑斗拱拆解排布模拟</h1><div>拖拽构件到画布，设置层级和连接点，检查装配关系。</div></div>
-    <div><button id="saveBtn">保存方案</button> <button id="exportBtn" class="secondary">导出JSON</button></div>
+    <div><button id="saveBtn">保存方案</button> <button id="importBtn" class="secondary">导入JSON</button> <input id="importFileInput" type="file" accept=".json,application/json" style="display:none"> <button id="exportBtn" class="secondary">导出JSON</button></div>
   </header>
   <main class="app">
     <aside class="panel">
@@ -33,6 +34,9 @@
   </main>
   <script src="js/templates.js"></script>
   <script src="js/renderer.js"></script>
+  <script src="js/importParser.js"></script>
+  <script src="js/importValidator.js"></script>
+  <script src="js/importUI.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

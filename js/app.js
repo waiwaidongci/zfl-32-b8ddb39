@@ -10,6 +10,8 @@ const App = {
   explodeBtn: null,
   saveBtn: null,
   exportBtn: null,
+  importBtn: null,
+  importFileInput: null,
 
   scheme: [],
   selected: "",
@@ -26,6 +28,8 @@ const App = {
     this.explodeBtn = document.querySelector("#explodeBtn");
     this.saveBtn = document.querySelector("#saveBtn");
     this.exportBtn = document.querySelector("#exportBtn");
+    this.importBtn = document.querySelector("#importBtn");
+    this.importFileInput = document.querySelector("#importFileInput");
 
     this.scheme = JSON.parse(localStorage.getItem("zfl32Scheme") || "null") || [
       { id: crypto.randomUUID(), type: "栌斗", x: 520, y: 520, layer: 1, dir: "正", connect: "柱头" },
@@ -58,6 +62,8 @@ const App = {
     this.explodeBtn.onclick = () => this.canvas.classList.toggle("exploded");
     this.saveBtn.onclick = () => localStorage.setItem("zfl32Scheme", JSON.stringify(this.scheme));
     this.exportBtn.onclick = () => this.exportJSON();
+    this.importBtn.onclick = () => this.importFileInput.click();
+    this.importFileInput.onchange = () => ImportUI.open(this.importFileInput, this.parts, parts => this.applyImportedScheme(parts));
   },
 
   renderAll(opts = {}) {
@@ -110,6 +116,38 @@ const App = {
     a.download = "dougong-scheme.json";
     a.click();
     URL.revokeObjectURL(a.href);
+  },
+
+  applyImportedScheme(parts) {
+    this.scheme = parts.map(p => {
+      if (!p.id || p.id.trim() === "") {
+        p.id = crypto.randomUUID();
+      }
+      if (p.layer === undefined || p.layer === null || isNaN(Number(p.layer))) {
+        p.layer = 1;
+      } else {
+        p.layer = Math.min(8, Math.max(1, Math.round(Number(p.layer))));
+      }
+      if (p.x === undefined || p.x === null || isNaN(Number(p.x))) {
+        p.x = 460 + Math.random() * 120;
+      } else {
+        p.x = Math.round(Number(p.x));
+      }
+      if (p.y === undefined || p.y === null || isNaN(Number(p.y))) {
+        p.y = 320 + Math.random() * 80;
+      } else {
+        p.y = Math.round(Number(p.y));
+      }
+      if (!p.dir || p.dir.trim() === "") {
+        p.dir = "正";
+      }
+      if (p.connect === undefined || p.connect === null) {
+        p.connect = "";
+      }
+      return p;
+    });
+    this.selected = "";
+    this.renderAll();
   }
 };
 
