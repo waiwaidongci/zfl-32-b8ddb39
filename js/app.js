@@ -12,11 +12,14 @@ const App = {
   exportBtn: null,
   importBtn: null,
   importFileInput: null,
+  playerControls: null,
+  playerStepInfo: null,
 
   scheme: [],
   selected: "",
   drag: null,
   errorPartIds: [],
+  playerUnsubscribe: null,
 
   init() {
     this.canvas = document.querySelector("#canvas");
@@ -31,6 +34,8 @@ const App = {
     this.exportBtn = document.querySelector("#exportBtn");
     this.importBtn = document.querySelector("#importBtn");
     this.importFileInput = document.querySelector("#importFileInput");
+    this.playerControls = document.querySelector("#playerControls");
+    this.playerStepInfo = document.querySelector("#playerStepInfo");
 
     this.scheme = JSON.parse(localStorage.getItem("zfl32Scheme") || "null") || [
       { id: crypto.randomUUID(), type: "栌斗", x: 520, y: 520, layer: 1, dir: "正", connect: "柱头" },
@@ -38,7 +43,46 @@ const App = {
     ];
 
     this.bindEvents();
+    this.initPlayer();
     this.renderAll();
+  },
+
+  initPlayer() {
+    AssemblyPlayerState.init(this.scheme);
+
+    if (this.playerControls && this.playerStepInfo) {
+      AssemblyPlayerUI.init("#playerControls", "#playerStepInfo", {
+        onStart: () => this.startAssemblyDemo(),
+        onStop: () => this.stopAssemblyDemo()
+      });
+    }
+
+    this.playerUnsubscribe = AssemblyPlayerState.subscribe(() => {
+      this.renderAll();
+    });
+  },
+
+  startAssemblyDemo() {
+    if (!AssemblyPlayerState.hasSteps()) {
+      alert("当前方案没有构件，无法进行装配演示。");
+      return;
+    }
+    this.drag = null;
+    this.selected = "";
+    AssemblyPlayerState.activate();
+    AssemblyPlayerState.nextStep();
+  },
+
+  stopAssemblyDemo() {
+    AssemblyPlayerState.deactivate();
+  },
+
+  refreshPlayerSteps() {
+    if (AssemblyPlayerState.isActive) {
+      AssemblyPlayerState.setScheme(this.scheme);
+    } else {
+      AssemblyPlayerState.init(this.scheme);
+    }
   },
 
   bindEvents() {
@@ -46,16 +90,22 @@ const App = {
     Renderer.renderTemplates(this.templateLibrary, DOUGONG_TEMPLATES, tplId => this.loadTemplate(tplId));
 
     window.onpointermove = event => {
-      if (!this.drag) return;
+      if (!this.drag || AssemblyPlayerState.isActive) return;
       const rect = this.canvas.getBoundingClientRect();
       const item = this.scheme.find(p => p.id === this.drag.id);
+      if (!item) return;
       const zoom = Number(this.zoomInput.value) / 100;
       item.x = Math.round((event.clientX - rect.left) / zoom - this.drag.ox);
       item.y = Math.round((event.clientY - rect.top) / zoom - this.drag.oy);
       this.renderAll();
     };
 
-    window.onpointerup = () => this.drag = null;
+    window.onpointerup = () => {
+      if (this.drag && !AssemblyPlayerState.isActive) {
+        this.refreshPlayerSteps();
+      }
+      this.drag = null;
+    };
 
     this.zoomInput.oninput = e => this.canvas.style.transform = "scale(" + (Number(e.target.value) / 100) + ")";
     this.zoomInput.dispatchEvent(new Event("input"));
@@ -68,33 +118,55 @@ const App = {
   },
 
   renderAll(opts = {}) {
+    const isAssemblyMode = AssemblyPlayerState.isActive;
+    const playerState = AssemblyPlayerState.getState();
+    const renderOpts = {
+      isAssemblyMode: isAssemblyMode,
+      visiblePartIds: playerState.installedPartIds,
+      currentPartId: playerState.currentStepInfo ? playerState.currentStepInfo.partId : null
+    };
+
     if (!opts.editorOnly && !opts.treeAndChecksOnly) {
       Renderer.render(this.canvas, this.scheme, this.selected, this.errorPartIds, (id, ox, oy) => {
+        if (AssemblyPlayerState.isActive) return;
         this.selected = id;
         this.drag = { id, ox, oy };
         this.renderAll();
-      });
+      }, renderOpts);
     }
-    Renderer.renderEditor(this.editor, this.scheme, this.selected,
-      editorOpts => this.renderAll(editorOpts || {}),
-      id => {
-        this.scheme = this.scheme.filter(x => x.id !== id);
-        this.selected = "";
-        this.renderAll();
-      }
-    );
-    if (!opts.editorOnly) {
-      Renderer.renderTree(this.tree, this.scheme);
-      const checkResult = Renderer.renderChecks(this.checks, this.scheme, this.parts,
-        id => this.selectPartById(id)
+
+    if (!isAssemblyMode) {
+      Renderer.renderEditor(this.editor, this.scheme, this.selected,
+        editorOpts => {
+          if (!editorOpts || !editorOpts.treeAndChecksOnly) {
+            this.refreshPlayerSteps();
+          }
+          this.renderAll(editorOpts || {});
+        },
+        id => {
+          this.scheme = this.scheme.filter(x => x.id !== id);
+          this.selected = "";
+          this.refreshPlayerSteps();
+          this.renderAll();
+        }
       );
-      this.errorPartIds = checkResult.errorPartIds;
+    }
+
+    if (!opts.editorOnly) {
+      if (!isAssemblyMode) {
+        Renderer.renderTree(this.tree, this.scheme);
+        const checkResult = Renderer.renderChecks(this.checks, this.scheme, this.parts,
+          id => this.selectPartById(id)
+        );
+        this.errorPartIds = checkResult.errorPartIds;
+      }
       if (!opts.editorOnly && !opts.treeAndChecksOnly) {
         Renderer.render(this.canvas, this.scheme, this.selected, this.errorPartIds, (id, ox, oy) => {
+          if (AssemblyPlayerState.isActive) return;
           this.selected = id;
           this.drag = { id, ox, oy };
           this.renderAll();
-        });
+        }, renderOpts);
       }
     }
   },
@@ -123,6 +195,7 @@ const App = {
       dir: "正",
       connect: ""
     });
+    this.refreshPlayerSteps();
     this.renderAll();
   },
 
@@ -131,6 +204,7 @@ const App = {
     if (!tpl) return;
     this.scheme = tpl.parts.map(p => ({ id: crypto.randomUUID(), ...p }));
     this.selected = "";
+    this.refreshPlayerSteps();
     this.renderAll();
   },
 
@@ -181,6 +255,7 @@ const App = {
       return item;
     });
     this.selected = "";
+    this.refreshPlayerSteps();
     this.renderAll();
   }
 };

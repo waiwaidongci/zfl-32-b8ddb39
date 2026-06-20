@@ -1,20 +1,40 @@
 const Renderer = {
-  render(canvas, scheme, selected, errorPartIds, onSelect) {
+  render(canvas, scheme, selected, errorPartIds, onSelect, opts = {}) {
     const errorSet = new Set(errorPartIds || []);
+    const visibleSet = opts.visiblePartIds ? new Set(opts.visiblePartIds) : null;
+    const currentPartId = opts.currentPartId || null;
+    const isAssemblyMode = opts.isAssemblyMode || false;
+
+    if (isAssemblyMode) {
+      canvas.classList.add("assembly-mode");
+    } else {
+      canvas.classList.remove("assembly-mode");
+    }
+
     canvas.innerHTML = scheme.map(p => {
       const classes = ["part", p.type];
       if (p.id === selected) classes.push("selected");
       if (errorSet.has(p.id)) classes.push("has-error");
+      if (p.id === currentPartId) classes.push("assembly-current");
+      if (visibleSet && !visibleSet.has(p.id)) classes.push("assembly-hidden");
       return '<div class="' + classes.join(" ") + '" data-id="' + p.id +
         '" style="left:' + p.x + 'px;top:' + p.y + 'px;--explode:' + (-p.layer * 34) + 'px">' +
         p.type + '</div>';
     }).join("");
-    canvas.querySelectorAll(".part").forEach(el => {
-      el.onpointerdown = event => {
-        const id = el.dataset.id;
-        onSelect(id, event.offsetX, event.offsetY);
-      };
-    });
+
+    if (!isAssemblyMode) {
+      canvas.querySelectorAll(".part").forEach(el => {
+        el.onpointerdown = event => {
+          const id = el.dataset.id;
+          onSelect(id, event.offsetX, event.offsetY);
+        };
+      });
+    } else {
+      canvas.querySelectorAll(".part").forEach(el => {
+        el.onpointerdown = null;
+        el.style.cursor = "default";
+      });
+    }
   },
 
   renderEditor(editor, scheme, selected, onChange, onDelete) {

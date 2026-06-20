@@ -1,0 +1,256 @@
+.player-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+}
+
+.player-btn {
+  min-width: 40px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.player-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.player-btn:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.player-controls-group {
+  display: inline-flex;
+  gap: 4px;
+  background: #fff;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid #d8cbb8;
+}
+
+.player-controls-group .player-btn {
+  min-width: 36px;
+  height: 34px;
+  font-size: 16px;
+}
+
+.player-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 200px;
+}
+
+.player-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: #e8ddd0;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.player-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8d3d2d, #b85c4a);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+.player-progress-text {
+  font-size: 13px;
+  color: #5a4e41;
+  font-weight: 600;
+  min-width: 60px;
+  text-align: right;
+}
+
+.player-speed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.player-speed label {
+  margin: 0;
+  font-size: 12px;
+  color: #76695c;
+  white-space: nowrap;
+}
+
+.player-speed select {
+  width: auto;
+  min-width: 110px;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.step-info-empty {
+  text-align: center;
+  padding: 30px 15px;
+  color: #76695c;
+}
+
+.step-info-icon {
+  font-size: 48px;
+  margin-bottom: 10px;
+  opacity: 0.6;
+}
+
+.step-info-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #8d3d2d;
+  margin-bottom: 8px;
+}
+
+.step-info-desc {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #76695c;
+}
+
+.step-info {
+  display: grid;
+  gap: 12px;
+}
+
+.step-info-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.step-badge {
+  background: #8d3d2d;
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.step-layer-badge {
+  background: #6f6458;
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.step-part-name {
+  font-size: 24px;
+  font-weight: 800;
+  color: #252019;
+  padding: 12px;
+  background: linear-gradient(135deg, #fff5e6, #fff);
+  border-radius: 8px;
+  border: 2px solid #d8cbb8;
+  text-align: center;
+}
+
+.step-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid #e8ddd0;
+}
+
+.step-info-label {
+  font-size: 13px;
+  color: #76695c;
+  font-weight: 600;
+  min-width: 60px;
+}
+
+.step-info-value {
+  font-size: 14px;
+  color: #252019;
+  font-weight: 600;
+}
+
+.step-info-section {
+  display: grid;
+  gap: 8px;
+}
+
+.step-info-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #8d3d2d;
+  padding-left: 4px;
+  border-left: 3px solid #8d3d2d;
+}
+
+.step-hints {
+  display: grid;
+  gap: 6px;
+}
+
+.step-hint-item {
+  padding: 10px 12px;
+  background: #fff9f0;
+  border-radius: 6px;
+  border-left: 3px solid #b87d23;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #5a4e41;
+}
+
+.part.assembly-hidden {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transform: scale(0.8) !important;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.part.assembly-current {
+  animation: assembly-highlight 1s ease-in-out infinite;
+}
+
+@keyframes assembly-highlight {
+  0%, 100% {
+    box-shadow: 0 8px 18px rgba(60, 35, 20, 0.18), 0 0 0 3px rgba(219, 170, 64, 0.3);
+  }
+  50% {
+    box-shadow: 0 8px 18px rgba(60, 35, 20, 0.18), 0 0 18px 6px rgba(219, 170, 64, 0.6);
+  }
+}
+
+.canvas.assembly-mode .part:not(.assembly-current) {
+  cursor: default !important;
+}
+
+.canvas.assembly-mode .part.assembly-current {
+  cursor: default !important;
+}
+
+@media (max-width: 1050px) {
+  .player-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .player-progress {
+    min-width: 100%;
+  }
+
+  .player-speed {
+    justify-content: flex-end;
+  }
+}
