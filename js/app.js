@@ -478,20 +478,7 @@ const App = {
     this.exportBtn.onclick = function() { this.exportJSON(); }.bind(this);
     this.importBtn.onclick = function() { this.importFileInput.click(); }.bind(this);
     this.importFileInput.onchange = function() {
-      var file = this.importFileInput.files[0];
-      if (file) {
-        var reader = new FileReader();
-        reader.onload = function(e) {
-          try {
-            var raw = JSON.parse(e.target.result);
-            this._pendingImportMeasurement = MeasurementSerializer.parseImportData(raw);
-          } catch (err) {
-            this._pendingImportMeasurement = null;
-          }
-        }.bind(this);
-        reader.readAsText(file, "utf-8");
-      }
-      ImportUI.open(this.importFileInput, this.parts, function(parts) { this.applyImportedScheme(parts); }.bind(this));
+      ImportUI.open(this.importFileInput, this.parts, function(data) { this.applyImportedScheme(data); }.bind(this));
     }.bind(this);
 
     this.canvas.onpointerleave = function() {
@@ -691,59 +678,100 @@ const App = {
     URL.revokeObjectURL(a.href);
   },
 
-  applyImportedScheme(parts) {
-    if (this.hasUnsavedChanges()) {
-      var ok = confirm("当前方案有未保存的改动，导入新方案将丢失这些改动。确定要继续吗？");
-      if (!ok) return;
+  applyImportedScheme(data) {
+    var parts = Array.isArray(data) ? data : (data.parts || []);
+    var mode = (data && data.mode) ? data.mode : "replace";
+    var importedMeasurement = (data && data.measurement) ? data.measurement : null;
+
+    if (mode === "replace") {
+      if (this.hasUnsavedChanges()) {
+        var ok = confirm("当前方案有未保存的改动，导入新方案将丢失这些改动。确定要继续吗？");
+        if (!ok) return;
+      }
     }
 
     var MAX_LAYER = 16;
     var MIN_LAYER = 1;
     var VALID_DIRS = ["正", "左挑", "右挑"];
-    this.scheme = parts.map(function(p) {
-      var item = Object.assign({}, p);
-      if (!item.id || typeof item.id !== "string" || item.id.trim() === "") {
-        item.id = crypto.randomUUID();
-      }
-      if (item.layer === undefined || item.layer === null || isNaN(Number(item.layer))) {
-        item.layer = MIN_LAYER;
-      } else {
-        var n = Math.round(Number(item.layer));
-        item.layer = (n < MIN_LAYER || n > MAX_LAYER) ? Math.min(MAX_LAYER, Math.max(MIN_LAYER, n)) : n;
-      }
-      if (item.x === undefined || item.x === null || isNaN(Number(item.x))) {
-        item.x = Math.round(460 + Math.random() * 120);
-      } else {
-        item.x = Math.round(Number(item.x));
-      }
-      if (item.y === undefined || item.y === null || isNaN(Number(item.y))) {
-        item.y = Math.round(320 + Math.random() * 80);
-      } else {
-        item.y = Math.round(Number(item.y));
-      }
-      if (!item.dir || typeof item.dir !== "string" || !VALID_DIRS.includes(item.dir.trim())) {
-        item.dir = "正";
-      } else {
-        item.dir = item.dir.trim();
-      }
-      if (item.connect === undefined || item.connect === null) {
-        item.connect = "";
-      } else {
-        item.connect = String(item.connect);
-      }
-      return item;
-    });
-    SelectionManager.clear();
 
-    if (this._pendingImportMeasurement && this._pendingImportMeasurement.measurement) {
-      var m = this._pendingImportMeasurement.measurement;
-      MeasurementState.init(m.annotations, m.scale);
+    if (mode === "replace") {
+      this.scheme = parts.map(function(p) {
+        var item = Object.assign({}, p);
+        if (!item.id || typeof item.id !== "string" || item.id.trim() === "") {
+          item.id = crypto.randomUUID();
+        }
+        if (item.layer === undefined || item.layer === null || isNaN(Number(item.layer))) {
+          item.layer = MIN_LAYER;
+        } else {
+          var n = Math.round(Number(item.layer));
+          item.layer = (n < MIN_LAYER || n > MAX_LAYER) ? Math.min(MAX_LAYER, Math.max(MIN_LAYER, n)) : n;
+        }
+        if (item.x === undefined || item.x === null || isNaN(Number(item.x))) {
+          item.x = Math.round(460 + Math.random() * 120);
+        } else {
+          item.x = Math.round(Number(item.x));
+        }
+        if (item.y === undefined || item.y === null || isNaN(Number(item.y))) {
+          item.y = Math.round(320 + Math.random() * 80);
+        } else {
+          item.y = Math.round(Number(item.y));
+        }
+        if (!item.dir || typeof item.dir !== "string" || !VALID_DIRS.includes(item.dir.trim())) {
+          item.dir = "正";
+        } else {
+          item.dir = item.dir.trim();
+        }
+        if (item.connect === undefined || item.connect === null) {
+          item.connect = "";
+        } else {
+          item.connect = String(item.connect);
+        }
+        return item;
+      });
+      SelectionManager.clear();
+
+      if (importedMeasurement) {
+        MeasurementState.init(importedMeasurement.annotations, importedMeasurement.scale);
+      } else {
+        MeasurementState.init([], null);
+      }
+
+      SchemeState.clearCurrent();
     } else {
-      MeasurementState.init([], null);
+      var existingIds = this.scheme.map(function(p) { return p.id; });
+      var appendResult = ImportParser.processForAppend(parts, existingIds, 80, 80);
+      var newParts = appendResult.parts.map(function(p) {
+        var item = Object.assign({}, p);
+        if (item.layer === undefined || item.layer === null || isNaN(Number(item.layer))) {
+          item.layer = MIN_LAYER;
+        } else {
+          var n = Math.round(Number(item.layer));
+          item.layer = (n < MIN_LAYER || n > MAX_LAYER) ? Math.min(MAX_LAYER, Math.max(MIN_LAYER, n)) : n;
+        }
+        if (item.x === undefined || item.x === null || isNaN(Number(item.x))) {
+          item.x = Math.round(460 + Math.random() * 120);
+        } else {
+          item.x = Math.round(Number(item.x));
+        }
+        if (item.y === undefined || item.y === null || isNaN(Number(item.y))) {
+          item.y = Math.round(320 + Math.random() * 80);
+        } else {
+          item.y = Math.round(Number(item.y));
+        }
+        if (!item.dir || typeof item.dir !== "string" || !VALID_DIRS.includes(item.dir.trim())) {
+          item.dir = "正";
+        } else {
+          item.dir = item.dir.trim();
+        }
+        if (item.connect === undefined || item.connect === null) {
+          item.connect = "";
+        } else {
+          item.connect = String(item.connect);
+        }
+        return item;
+      });
+      this.scheme = this.scheme.concat(newParts);
     }
-    this._pendingImportMeasurement = null;
-
-    SchemeState.clearCurrent();
 
     this.refreshPlayerSteps();
     this.renderAll();

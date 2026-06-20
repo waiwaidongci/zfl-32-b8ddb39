@@ -4,6 +4,7 @@ const ImportUI = {
   currentData: null,
   currentValidation: null,
   onConfirmCallback: null,
+  importMode: "replace",
 
   open(fileInput, supportedParts, onConfirm) {
     this.onConfirmCallback = onConfirm;
@@ -88,9 +89,11 @@ const ImportUI = {
     const typeDistHtml = this._renderTypeDistribution(validation);
     const issuesHtml = this._renderIssues(validation);
     const previewTableHtml = this._renderPreviewTable(parsed, validation);
+    const importModeHtml = this._renderImportMode(parsed);
 
     const canImport = validation.canImport;
     const severityClass = "severity-" + validation.severity;
+    const confirmBtnText = this.importMode === "replace" ? "确认导入并替换画布" : "确认导入并追加到方案";
 
     this.modal.innerHTML =
       '<div class="import-header">' +
@@ -100,6 +103,7 @@ const ImportUI = {
       '<div class="import-body">' +
         '<div class="import-section">' + fileInfoHtml + '</div>' +
         '<div class="import-section ' + severityClass + '">' + summaryHtml + '</div>' +
+        '<div class="import-section">' + importModeHtml + '</div>' +
         '<div class="import-section">' + typeDistHtml + '</div>' +
         (issuesHtml ? '<div class="import-section">' + issuesHtml + '</div>' : "") +
         '<div class="import-section">' + previewTableHtml + '</div>' +
@@ -108,7 +112,7 @@ const ImportUI = {
         '<button class="import-btn-secondary" data-action="close">取消</button>' +
         '<button class="import-btn-primary ' + (canImport ? "" : "import-btn-disabled") + '" ' +
           (canImport ? 'data-action="confirm"' : "disabled title=\"存在未知构件类型，无法导入\"") + '>' +
-          (canImport ? "确认导入并替换画布" : "存在错误，无法导入") +
+          (canImport ? confirmBtnText : "存在错误，无法导入") +
         '</button>' +
       '</div>';
 
@@ -117,6 +121,49 @@ const ImportUI = {
     if (confirmBtn) {
       confirmBtn.onclick = () => this._confirmImport();
     }
+
+    this._bindImportModeEvents();
+  },
+
+  _renderImportMode(parsed) {
+    const hasMeasurement = parsed.measurement && parsed.measurement.annotations && parsed.measurement.annotations.length > 0;
+    return (
+      '<div class="import-section-title">导入方式</div>' +
+      '<div class="import-mode-group">' +
+        '<label class="import-mode-option ' + (this.importMode === "replace" ? "import-mode-selected" : "") + '">' +
+          '<input type="radio" name="importMode" value="replace" ' + (this.importMode === "replace" ? "checked" : "") + '>' +
+          '<div class="import-mode-content">' +
+            '<div class="import-mode-title">🔄 替换当前画布</div>' +
+            '<div class="import-mode-desc">清空当前画布，使用导入的数据完全替换。' +
+              (hasMeasurement ? ' 标注数据将一并覆盖。' : '') + '</div>' +
+          '</div>' +
+        '</label>' +
+        '<label class="import-mode-option ' + (this.importMode === "append" ? "import-mode-selected" : "") + '">' +
+          '<input type="radio" name="importMode" value="append" ' + (this.importMode === "append" ? "checked" : "") + '>' +
+          '<div class="import-mode-content">' +
+            '<div class="import-mode-title">➕ 追加到当前方案</div>' +
+            '<div class="import-mode-desc">将导入的构件添加到当前画布中，自动重新分配ID并偏移位置。' +
+              (hasMeasurement ? ' 当前标注保持不变，导入的标注将被忽略。' : '') + '</div>' +
+          '</div>' +
+        '</label>' +
+      '</div>'
+    );
+  },
+
+  _bindImportModeEvents() {
+    const radios = this.modal.querySelectorAll('input[name="importMode"]');
+    radios.forEach(radio => {
+      radio.addEventListener('change', e => {
+        this.importMode = e.target.value;
+        const options = this.modal.querySelectorAll('.import-mode-option');
+        options.forEach(opt => opt.classList.remove('import-mode-selected'));
+        e.target.closest('.import-mode-option').classList.add('import-mode-selected');
+        const confirmBtn = this.modal.querySelector('[data-action="confirm"]');
+        if (confirmBtn) {
+          confirmBtn.textContent = this.importMode === "replace" ? "确认导入并替换画布" : "确认导入并追加到方案";
+        }
+      });
+    });
   },
 
   _renderFileInfo(parsed) {
@@ -365,7 +412,11 @@ const ImportUI = {
       return rest;
     });
     if (this.onConfirmCallback) {
-      this.onConfirmCallback(cleanParts);
+      this.onConfirmCallback({
+        parts: cleanParts,
+        mode: this.importMode,
+        measurement: this.currentData.measurement || null
+      });
     }
     this.close();
   },
@@ -376,6 +427,7 @@ const ImportUI = {
     }
     this.currentData = null;
     this.currentValidation = null;
+    this.importMode = "replace";
   },
 
   _escapeHtml(str) {

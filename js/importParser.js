@@ -22,13 +22,15 @@ const ImportParser = {
             return;
           }
           const processed = this._processParts(parts);
+          const measurement = this._extractMeasurement(raw);
           resolve({
             fileName: file.name,
             fileSize: file.size,
             originalCount: parts.length,
             processedCount: processed.length,
             idAddedCount: processed.idAddedCount || 0,
-            parts: processed.parts
+            parts: processed.parts,
+            measurement: measurement
           });
         } catch (err) {
           reject(new Error("JSON 解析失败：" + err.message));
@@ -36,6 +38,14 @@ const ImportParser = {
       };
       reader.readAsText(file, "utf-8");
     });
+  },
+
+  _extractMeasurement(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    if (raw.measurement) {
+      return MeasurementSerializer ? MeasurementSerializer.deserialize(raw.measurement) : null;
+    }
+    return null;
   },
 
   _extractParts(raw) {
@@ -82,6 +92,35 @@ const ImportParser = {
       return item;
     });
     return { parts: processed, idAddedCount: idAdded };
+  },
+
+  processForAppend(parts, existingIds, offsetX, offsetY) {
+    const existingIdSet = new Set(existingIds || []);
+    const seenNewIds = new Set();
+    const dx = typeof offsetX === "number" ? offsetX : 80;
+    const dy = typeof offsetY === "number" ? offsetY : 80;
+    let idRegenerated = 0;
+
+    const processed = parts.map(p => {
+      const item = { ...p };
+      const origId = item.id;
+      if (!origId || typeof origId !== "string" || origId.trim() === "" ||
+          existingIdSet.has(origId) || seenNewIds.has(origId)) {
+        item.id = crypto.randomUUID();
+        idRegenerated++;
+      }
+      seenNewIds.add(item.id);
+
+      if (typeof item.x === "number") {
+        item.x = Math.round(item.x + dx);
+      }
+      if (typeof item.y === "number") {
+        item.y = Math.round(item.y + dy);
+      }
+      return item;
+    });
+
+    return { parts: processed, idRegenerated: idRegenerated };
   }
 };
 

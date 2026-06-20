@@ -558,3 +558,63 @@
   .import-stats { grid-template-columns: repeat(3, 1fr); }
   .import-type-row { grid-template-columns: 72px 1fr 38px; }
 }
+
+.import-mode-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.import-mode-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px;
+  border: 2px solid #e8dcc8;
+  border-radius: 10px;
+  cursor: pointer;
+  background: #fffaf0;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.import-mode-option:hover {
+  border-color: #c7b59a;
+  background: #fff5e6;
+}
+
+.import-mode-option.import-mode-selected {
+  border-color: #8d3d2d;
+  background: #fff3eb;
+  box-shadow: 0 0 0 3px rgba(141, 61, 45, 0.12);
+}
+
+.import-mode-option input[type="radio"] {
+  margin-top: 4px;
+  accent-color: #8d3d2d;
+  cursor: pointer;
+}
+
+.import-mode-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.import-mode-title {
+  font-weight: 800;
+  font-size: 14px;
+  color: #4a2c1f;
+  margin-bottom: 4px;
+}
+
+.import-mode-desc {
+  font-size: 12px;
+  color: #6f5a4a;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .import-mode-group {
+    grid-template-columns: 1fr;
+  }
+}
