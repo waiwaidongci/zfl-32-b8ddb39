@@ -8,6 +8,180 @@ const AutoLayoutPanel = (function() {
   var _MAX_HISTORY = 30;
   var _protectedMode = true;
   var _lastSchemeSnapshot = null;
+  var _PRESET_STORAGE_KEY = "autoLayout_presets";
+
+  function _getPresets() {
+    try {
+      var raw = localStorage.getItem(_PRESET_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function _savePresets(presets) {
+    try {
+      localStorage.setItem(_PRESET_STORAGE_KEY, JSON.stringify(presets));
+    } catch (e) {}
+  }
+
+  function _addPreset(name, config) {
+    var presets = _getPresets();
+    var existing = presets.filter(function(p) { return p.name === name; });
+    if (existing.length > 0) return false;
+    presets.push({
+      name: name,
+      config: {
+        targetLayers: config.targetLayers,
+        partsPerLayer: config.partsPerLayer,
+        symmetric: config.symmetric,
+        baseConnect: config.baseConnect
+      },
+      savedAt: Date.now()
+    });
+    _savePresets(presets);
+    return true;
+  }
+
+  function _overwritePreset(name, config) {
+    var presets = _getPresets();
+    var found = false;
+    for (var i = 0; i < presets.length; i++) {
+      if (presets[i].name === name) {
+        presets[i].config = {
+          targetLayers: config.targetLayers,
+          partsPerLayer: config.partsPerLayer,
+          symmetric: config.symmetric,
+          baseConnect: config.baseConnect
+        };
+        presets[i].savedAt = Date.now();
+        found = true;
+        break;
+      }
+    }
+    if (!found) return false;
+    _savePresets(presets);
+    return true;
+  }
+
+  function _deletePreset(name) {
+    var presets = _getPresets();
+    presets = presets.filter(function(p) { return p.name !== name; });
+    _savePresets(presets);
+  }
+
+  function _loadPreset(name) {
+    var presets = _getPresets();
+    for (var i = 0; i < presets.length; i++) {
+      if (presets[i].name === name) return presets[i].config;
+    }
+    return null;
+  }
+
+  function applyPresetToForm(config) {
+    if (!config) return;
+    var layersInput = _container.querySelector("#autoLayoutLayers");
+    var densityInput = _container.querySelector("#autoLayoutDensity");
+    var symmetricInput = _container.querySelector("#autoLayoutSymmetric");
+    var connectInput = _container.querySelector("#autoLayoutBaseConnect");
+    if (layersInput) layersInput.value = config.targetLayers || 4;
+    if (densityInput) densityInput.value = config.partsPerLayer || 3;
+    if (symmetricInput) symmetricInput.checked = !!config.symmetric;
+    if (connectInput) connectInput.value = config.baseConnect || "柱头";
+  }
+
+  function refreshPresetList() {
+    var select = _container.querySelector("#autoLayoutPresetSelect");
+    if (!select) return;
+    var currentVal = select.value;
+    var presets = _getPresets();
+    select.innerHTML = '<option value="">-- 选择预设 --</option>';
+    presets.forEach(function(p) {
+      var opt = document.createElement("option");
+      opt.value = p.name;
+      opt.textContent = p.name;
+      select.appendChild(opt);
+    });
+    if (currentVal) select.value = currentVal;
+  }
+
+  function onPresetLoad() {
+    var select = _container.querySelector("#autoLayoutPresetSelect");
+    if (!select || !select.value) {
+      showPresetNotice("请先选择一个预设", "warn");
+      return;
+    }
+    var config = _loadPreset(select.value);
+    if (!config) {
+      showPresetNotice("预设加载失败", "bad");
+      return;
+    }
+    applyPresetToForm(config);
+    showPresetNotice("已加载预设「" + select.value + "」，可点击「自动生成方案」使用此配置", "ok");
+  }
+
+  function onPresetSave() {
+    var nameInput = _container.querySelector("#autoLayoutPresetName");
+    if (!nameInput) return;
+    var name = (nameInput.value || "").trim();
+    if (!name) {
+      showPresetNotice("请输入预设名称", "warn");
+      return;
+    }
+    var config = getConfig();
+    var added = _addPreset(name, config);
+    if (!added) {
+      showPresetNotice("同名预设已存在，请使用「覆盖」或更改名称", "warn");
+      return;
+    }
+    refreshPresetList();
+    var select = _container.querySelector("#autoLayoutPresetSelect");
+    if (select) select.value = name;
+    showPresetNotice("预设「" + name + "」已保存", "ok");
+  }
+
+  function onPresetOverwrite() {
+    var select = _container.querySelector("#autoLayoutPresetSelect");
+    if (!select || !select.value) {
+      showPresetNotice("请先选择要覆盖的预设", "warn");
+      return;
+    }
+    var config = getConfig();
+    var ok = _overwritePreset(select.value, config);
+    if (ok) {
+      refreshPresetList();
+      showPresetNotice("预设「" + select.value + "」已覆盖", "ok");
+    } else {
+      showPresetNotice("覆盖失败，预设不存在", "bad");
+    }
+  }
+
+  function onPresetDelete() {
+    var select = _container.querySelector("#autoLayoutPresetSelect");
+    if (!select || !select.value) {
+      showPresetNotice("请先选择要删除的预设", "warn");
+      return;
+    }
+    var name = select.value;
+    _deletePreset(name);
+    refreshPresetList();
+    showPresetNotice("预设「" + name + "」已删除", "ok");
+  }
+
+  function showPresetNotice(msg, type) {
+    var noticeEl = _container.querySelector(".autoLayout-preset-notice");
+    if (!noticeEl) return;
+    var cls = type === "ok" ? "autoLayout-preset-notice-ok"
+            : type === "warn" ? "autoLayout-preset-notice-warn"
+            : "autoLayout-preset-notice-bad";
+    noticeEl.className = "autoLayout-preset-notice " + cls;
+    noticeEl.textContent = msg;
+    noticeEl.style.display = "block";
+    clearTimeout(noticeEl._timer);
+    noticeEl._timer = setTimeout(function() {
+      noticeEl.style.display = "none";
+    }, 3000);
+  }
 
   function init(selector, callbacks) {
     _container = document.querySelector(selector);
@@ -526,6 +700,22 @@ const AutoLayoutPanel = (function() {
           '<label for="autoLayoutBaseConnect">基础连接点</label>' +
           '<input id="autoLayoutBaseConnect" type="text" value="柱头" placeholder="如：柱头、柱身、平板枋">' +
         '</div>' +
+        '<div class="autoLayout-preset-section">' +
+          '<div class="autoLayout-preset-title">规则预设</div>' +
+          '<div class="autoLayout-preset-row">' +
+            '<select id="autoLayoutPresetSelect"><option value="">-- 选择预设 --</option></select>' +
+          '</div>' +
+          '<div class="autoLayout-preset-row">' +
+            '<input id="autoLayoutPresetName" type="text" placeholder="输入预设名称">' +
+            '<button id="autoLayoutPresetSaveBtn" class="secondary" title="保存当前参数为新预设">保存</button>' +
+          '</div>' +
+          '<div class="autoLayout-preset-row">' +
+            '<button id="autoLayoutPresetLoadBtn" class="secondary" title="加载选中预设到表单（不会自动生成）">加载</button>' +
+            '<button id="autoLayoutPresetOverwriteBtn" class="secondary" title="用当前参数覆盖选中预设">覆盖</button>' +
+            '<button id="autoLayoutPresetDeleteBtn" class="secondary" title="删除选中预设">删除</button>' +
+          '</div>' +
+          '<div class="autoLayout-preset-notice" style="display:none"></div>' +
+        '</div>' +
         '<div class="autoLayout-actions">' +
           '<button id="autoLayoutGenerateBtn" title="根据约束自动生成斗拱方案（首层仅1个栌斗）">自动生成方案</button>' +
           '<button id="autoLayoutRecheckBtn" class="secondary" title="运行完整装配检查">装配检查</button>' +
@@ -551,6 +741,18 @@ const AutoLayoutPanel = (function() {
     if (repairBtn) repairBtn.onclick = onRepair;
     if (undoBtn) undoBtn.onclick = onUndo;
     if (redoBtn) redoBtn.onclick = onRedo;
+
+    var presetLoadBtn = _container.querySelector("#autoLayoutPresetLoadBtn");
+    var presetSaveBtn = _container.querySelector("#autoLayoutPresetSaveBtn");
+    var presetOverwriteBtn = _container.querySelector("#autoLayoutPresetOverwriteBtn");
+    var presetDeleteBtn = _container.querySelector("#autoLayoutPresetDeleteBtn");
+
+    if (presetLoadBtn) presetLoadBtn.onclick = onPresetLoad;
+    if (presetSaveBtn) presetSaveBtn.onclick = onPresetSave;
+    if (presetOverwriteBtn) presetOverwriteBtn.onclick = onPresetOverwrite;
+    if (presetDeleteBtn) presetDeleteBtn.onclick = onPresetDelete;
+
+    refreshPresetList();
   }
 
   return {
