@@ -4,6 +4,7 @@ const Renderer = {
     const visibleSet = opts.visiblePartIds ? new Set(opts.visiblePartIds) : null;
     const currentPartId = opts.currentPartId || null;
     const isAssemblyMode = opts.isAssemblyMode || false;
+    const selectedSet = selected instanceof Set ? selected : new Set(selected ? [selected] : []);
 
     if (isAssemblyMode) {
       canvas.classList.add("assembly-mode");
@@ -13,7 +14,8 @@ const Renderer = {
 
     canvas.innerHTML = scheme.map(p => {
       const classes = ["part", p.type];
-      if (p.id === selected) classes.push("selected");
+      if (selectedSet.has(p.id)) classes.push("selected");
+      if (selectedSet.size > 1 && selectedSet.has(p.id)) classes.push("multi-selected");
       if (errorSet.has(p.id)) classes.push("has-error");
       if (p.id === currentPartId) classes.push("assembly-current");
       if (visibleSet && !visibleSet.has(p.id)) classes.push("assembly-hidden");
@@ -26,7 +28,7 @@ const Renderer = {
       canvas.querySelectorAll(".part").forEach(el => {
         el.onpointerdown = event => {
           const id = el.dataset.id;
-          onSelect(id, event.offsetX, event.offsetY);
+          onSelect(id, event.offsetX, event.offsetY, event.shiftKey);
         };
       });
     } else {
@@ -38,13 +40,15 @@ const Renderer = {
   },
 
   renderEditor(editor, scheme, selected, onChange, onDelete) {
-    const p = scheme.find(x => x.id === selected);
+    var selectedIds = selected instanceof Set ? selected : new Set(selected ? [selected] : []);
+    var p = scheme.find(function(x) { return selectedIds.has(x.id); });
     if (!p) {
       editor.innerHTML = "请选择构件。";
       return;
     }
+    var multiCount = selectedIds.size > 1 ? ' <span class="batch-info" style="font-size:12px;color:#8d3d2d">（已选' + selectedIds.size + '项）</span>' : '';
     editor.innerHTML =
-      '<div class="item"><b>' + p.type + '</b>' +
+      '<div class="item"><b>' + p.type + '</b>' + multiCount +
       '<label>层级</label><input id="layerInput" type="number" min="1" max="16" value="' + p.layer + '">' +
       '<label>方向</label><select id="dirInput"><option>正</option><option>左挑</option><option>右挑</option></select>' +
       '<label>连接点</label><input id="connectInput" value="' + p.connect + '">' +

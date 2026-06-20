@@ -1,0 +1,99 @@
+.batch-section {
+  padding: 4px 0;
+}
+
+.batch-info {
+  font-size: 14px;
+  color: #4a4035;
+  margin-bottom: 4px;
+}
+
+.batch-info b {
+  color: #8d3d2d;
+}
+
+.batch-hint {
+  font-size: 12px;
+  color: #9a8c7e;
+  margin-bottom: 10px;
+}
+
+.batch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.batch-label {
+  font-size: 13px;
+  color: #5a4e41;
+  white-space: nowrap;
+  min-width: 90px;
+}
+
+.batch-inline-label {
+  font-size: 12px;
+  color: #76695c;
+  white-space: nowrap;
+}
+
+.batch-input {
+  flex: 1;
+  border: 1px solid #d8cbb8;
+  border-radius: 6px;
+  padding: 7px 9px;
+  font: inherit;
+  background: #fff;
+  font-size: 13px;
+}
+
+.batch-inline-input {
+  width: 70px;
+  border: 1px solid #d8cbb8;
+  border-radius: 6px;
+  padding: 7px 9px;
+  font: inherit;
+  background: #fff;
+  font-size: 13px;
+  text-align: center;
+}
+
+.batch-btn {
+  border: 0;
+  border-radius: 8px;
+  padding: 9px 16px;
+  background: #8d3d2d;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.batch-btn:hover:not(:disabled) {
+  background: #a14835;
+}
+
+.batch-btn:disabled {
+  background: #b5a999;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.batch-divider {
+  height: 1px;
+  background: #e8dcc8;
+  margin: 12px 0;
+}
+
+.part.multi-selected {
+  outline: 3px solid rgba(219, 140, 64, 0.8);
+  box-shadow: 0 0 10px rgba(219, 140, 64, 0.35);
+}
+
+.part.multi-selected.selected {
+  outline: 4px solid rgba(219, 170, 64, 0.9);
+  box-shadow: 0 0 12px rgba(219, 170, 64, 0.4);
+}

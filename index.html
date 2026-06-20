@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="css/measurement.css">
   <link rel="stylesheet" href="css/import.css">
   <link rel="stylesheet" href="css/assemblyPlayer.css">
+  <link rel="stylesheet" href="css/batch.css">
 </head>
 <body>
   <header>
@@ -26,6 +27,8 @@
       <h2>尺寸标注</h2>
       <button id="measureBtn" class="secondary">测量模式</button>
       <div id="measurementPanel"></div>
+      <h2>对称生成与批量排布</h2>
+      <div id="batchPanel"></div>
     </aside>
     <section class="panel canvasWrap">
       <div id="playerControls"></div>
@@ -45,6 +48,9 @@
   <script src="js/templates.js"></script>
   <script src="js/assemblyRules.js"></script>
   <script src="js/assemblyChecker.js"></script>
+  <script src="js/selectionManager.js"></script>
+  <script src="js/geometryTransform.js"></script>
+  <script src="js/batchPanel.js"></script>
   <script src="js/measurementState.js"></script>
   <script src="js/measurementSerializer.js"></script>
   <script src="js/annotationRenderer.js"></script>

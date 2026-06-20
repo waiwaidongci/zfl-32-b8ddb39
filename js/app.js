@@ -16,13 +16,18 @@ const App = {
   playerStepInfo: null,
   measureBtn: null,
   measurementPanel: null,
+  batchPanel: null,
 
   scheme: [],
-  selected: "",
   drag: null,
   errorPartIds: [],
   playerUnsubscribe: null,
   measurementUnsubscribe: null,
+  selectionUnsubscribe: null,
+
+  _getSelectedSet() {
+    return new Set(SelectionManager.getIds());
+  },
 
   init() {
     this.canvas = document.querySelector("#canvas");
@@ -41,16 +46,34 @@ const App = {
     this.playerStepInfo = document.querySelector("#playerStepInfo");
     this.measureBtn = document.querySelector("#measureBtn");
     this.measurementPanel = document.querySelector("#measurementPanel");
+    this.batchPanel = document.querySelector("#batchPanel");
 
     this.scheme = JSON.parse(localStorage.getItem("zfl32Scheme") || "null") || [
       { id: crypto.randomUUID(), type: "栌斗", x: 520, y: 520, layer: 1, dir: "正", connect: "柱头" },
       { id: crypto.randomUUID(), type: "华拱", x: 495, y: 450, layer: 2, dir: "正", connect: "下承" }
     ];
 
+    SelectionManager.init();
+    this.initBatch();
     this.initMeasurement();
     this.bindEvents();
     this.initPlayer();
     this.renderAll();
+  },
+
+  initBatch() {
+    BatchPanel.init("#batchPanel", {
+      onMirror: function(axisX) { this.mirrorSelected(axisX); }.bind(this),
+      onBatchCopy: function(count, spacing) { this.batchCopySelected(count, spacing); }.bind(this)
+    });
+
+    this.selectionUnsubscribe = SelectionManager.subscribe(function() {
+      this._updateBatchPanel();
+    }.bind(this));
+  },
+
+  _updateBatchPanel() {
+    BatchPanel.render(SelectionManager.count());
   },
 
   initMeasurement() {
@@ -61,9 +84,9 @@ const App = {
       MeasurementState.init([], null);
     }
 
-    this.measurementUnsubscribe = MeasurementState.subscribe(() => {
+    this.measurementUnsubscribe = MeasurementState.subscribe(function() {
       this.renderAll();
-    });
+    }.bind(this));
   },
 
   initPlayer() {
@@ -71,14 +94,14 @@ const App = {
 
     if (this.playerControls && this.playerStepInfo) {
       AssemblyPlayerUI.init("#playerControls", "#playerStepInfo", {
-        onStart: () => this.startAssemblyDemo(),
-        onStop: () => this.stopAssemblyDemo()
+        onStart: function() { this.startAssemblyDemo(); }.bind(this),
+        onStop: function() { this.stopAssemblyDemo(); }.bind(this)
       });
     }
 
-    this.playerUnsubscribe = AssemblyPlayerState.subscribe(() => {
+    this.playerUnsubscribe = AssemblyPlayerState.subscribe(function() {
       this.renderAll();
-    });
+    }.bind(this));
   },
 
   startAssemblyDemo() {
@@ -87,7 +110,7 @@ const App = {
       return;
     }
     this.drag = null;
-    this.selected = "";
+    SelectionManager.clear();
     AssemblyPlayerState.activate();
     AssemblyPlayerState.nextStep();
   },
@@ -104,11 +127,35 @@ const App = {
     }
   },
 
-  bindEvents() {
-    Renderer.renderLibrary(this.library, this.parts, type => this.addPart(type));
-    Renderer.renderTemplates(this.templateLibrary, DOUGONG_TEMPLATES, tplId => this.loadTemplate(tplId));
+  mirrorSelected(axisX) {
+    var ids = this._getSelectedSet();
+    if (ids.size === 0) return;
+    var newParts = GeometryTransform.mirrorCopy(this.scheme, ids, axisX);
+    if (newParts.length === 0) return;
+    newParts.forEach(function(p) { this.scheme.push(p); }.bind(this));
+    SelectionManager.clear();
+    newParts.forEach(function(p) { SelectionManager.addToSelection(p.id); });
+    this.refreshPlayerSteps();
+    this.renderAll();
+  },
 
-    window.onpointermove = event => {
+  batchCopySelected(count, spacing) {
+    var ids = this._getSelectedSet();
+    if (ids.size === 0) return;
+    var newParts = GeometryTransform.batchCopy(this.scheme, ids, count, spacing);
+    if (newParts.length === 0) return;
+    newParts.forEach(function(p) { this.scheme.push(p); }.bind(this));
+    SelectionManager.clear();
+    newParts.forEach(function(p) { SelectionManager.addToSelection(p.id); });
+    this.refreshPlayerSteps();
+    this.renderAll();
+  },
+
+  bindEvents() {
+    Renderer.renderLibrary(this.library, this.parts, function(type) { this.addPart(type); }.bind(this));
+    Renderer.renderTemplates(this.templateLibrary, DOUGONG_TEMPLATES, function(tplId) { this.loadTemplate(tplId); }.bind(this));
+
+    window.onpointermove = function(event) {
       var zoom = Number(this.zoomInput.value) / 100;
       var rect = this.canvas.getBoundingClientRect();
 
@@ -119,21 +166,21 @@ const App = {
       }
 
       if (!this.drag || AssemblyPlayerState.isActive) return;
-      const item = this.scheme.find(p => p.id === this.drag.id);
+      var item = this.scheme.find(function(p) { return p.id === this.drag.id; }.bind(this));
       if (!item) return;
       item.x = Math.round((event.clientX - rect.left) / zoom - this.drag.ox);
       item.y = Math.round((event.clientY - rect.top) / zoom - this.drag.oy);
       this.renderAll();
-    };
+    }.bind(this);
 
-    window.onpointerup = () => {
+    window.onpointerup = function() {
       if (this.drag && !AssemblyPlayerState.isActive) {
         this.refreshPlayerSteps();
       }
       this.drag = null;
-    };
+    }.bind(this);
 
-    this.canvas.onclick = event => {
+    this.canvas.onclick = function(event) {
       if (!MeasurementState.isActive) return;
       if (AssemblyPlayerState.isActive) return;
 
@@ -145,7 +192,7 @@ const App = {
       var partEl = event.target.closest(".part");
       if (partEl) {
         var partId = partEl.dataset.id;
-        var part = this.scheme.find(p => p.id === partId);
+        var part = this.scheme.find(function(p) { return p.id === partId; });
         if (part) {
           canvasX = part.x + Math.round(partEl.offsetWidth / 2);
           canvasY = part.y + Math.round(partEl.offsetHeight / 2);
@@ -157,45 +204,45 @@ const App = {
       } else {
         MeasurementState.addAnnotation(MeasurementState.pendingPoint, { x: canvasX, y: canvasY });
       }
-    };
+    }.bind(this);
 
-    this.zoomInput.oninput = e => this.canvas.style.transform = "scale(" + (Number(e.target.value) / 100) + ")";
+    this.zoomInput.oninput = function(e) { this.canvas.style.transform = "scale(" + (Number(e.target.value) / 100) + ")"; }.bind(this);
     this.zoomInput.dispatchEvent(new Event("input"));
 
-    this.explodeBtn.onclick = () => this.canvas.classList.toggle("exploded");
-    this.saveBtn.onclick = () => {
+    this.explodeBtn.onclick = function() { this.canvas.classList.toggle("exploded"); }.bind(this);
+    this.saveBtn.onclick = function() {
       localStorage.setItem("zfl32Scheme", JSON.stringify(this.scheme));
       MeasurementSerializer.saveToLocalStorage(
         MeasurementState.getAnnotations(),
         MeasurementState.getScale()
       );
-    };
-    this.exportBtn.onclick = () => this.exportJSON();
-    this.importBtn.onclick = () => this.importFileInput.click();
-    this.importFileInput.onchange = () => {
+    }.bind(this);
+    this.exportBtn.onclick = function() { this.exportJSON(); }.bind(this);
+    this.importBtn.onclick = function() { this.importFileInput.click(); }.bind(this);
+    this.importFileInput.onchange = function() {
       var file = this.importFileInput.files[0];
       if (file) {
         var reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = function(e) {
           try {
             var raw = JSON.parse(e.target.result);
             this._pendingImportMeasurement = MeasurementSerializer.parseImportData(raw);
           } catch (err) {
             this._pendingImportMeasurement = null;
           }
-        };
+        }.bind(this);
         reader.readAsText(file, "utf-8");
       }
-      ImportUI.open(this.importFileInput, this.parts, parts => this.applyImportedScheme(parts));
-    };
+      ImportUI.open(this.importFileInput, this.parts, function(parts) { this.applyImportedScheme(parts); }.bind(this));
+    }.bind(this);
 
-    this.canvas.onpointerleave = () => {
+    this.canvas.onpointerleave = function() {
       if (MeasurementState.isActive && MeasurementState.hoverPoint) {
         MeasurementState.setHoverPoint(null, null);
       }
-    };
+    }.bind(this);
 
-    this.measureBtn.onclick = () => {
+    this.measureBtn.onclick = function() {
       MeasurementState.toggleMode();
       if (MeasurementState.isActive) {
         this.canvas.classList.add("measuring");
@@ -206,9 +253,9 @@ const App = {
         this.measureBtn.classList.add("secondary");
         this.measureBtn.textContent = "测量模式";
       }
-    };
+    }.bind(this);
 
-    window.onkeydown = event => {
+    window.onkeydown = function(event) {
       if (event.key === "Escape" && MeasurementState.isActive) {
         if (MeasurementState.pendingPoint) {
           MeasurementState.clearPending();
@@ -220,6 +267,20 @@ const App = {
         }
         event.preventDefault();
       }
+      if ((event.key === "Delete" || event.key === "Backspace") && !MeasurementState.isActive) {
+        if (document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
+          return;
+        }
+        if (SelectionManager.count() > 0) {
+          var ids = SelectionManager.getIds();
+          var idSet = new Set(ids);
+          this.scheme = this.scheme.filter(function(x) { return !idSet.has(x.id); });
+          SelectionManager.clear();
+          this.refreshPlayerSteps();
+          this.renderAll();
+          event.preventDefault();
+        }
+      }
       if ((event.key === "Delete" || event.key === "Backspace") && MeasurementState.selectedAnnotationId) {
         if (document.activeElement && ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
           return;
@@ -227,32 +288,38 @@ const App = {
         MeasurementState.removeAnnotation(MeasurementState.selectedAnnotationId);
         event.preventDefault();
       }
-    };
+    }.bind(this);
   },
 
-  renderAll(opts = {}) {
-    const isAssemblyMode = AssemblyPlayerState.isActive;
-    const playerState = AssemblyPlayerState.getState();
-    const renderOpts = {
+  renderAll(opts) {
+    opts = opts || {};
+    var isAssemblyMode = AssemblyPlayerState.isActive;
+    var playerState = AssemblyPlayerState.getState();
+    var renderOpts = {
       isAssemblyMode: isAssemblyMode,
       visiblePartIds: playerState.installedPartIds,
       currentPartId: playerState.currentStepInfo ? playerState.currentStepInfo.partId : null
     };
-    const measureState = MeasurementState.getState();
+    var measureState = MeasurementState.getState();
+    var selectedSet = this._getSelectedSet();
 
     if (!opts.editorOnly && !opts.treeAndChecksOnly) {
-      Renderer.render(this.canvas, this.scheme, this.selected, this.errorPartIds, (id, ox, oy) => {
+      Renderer.render(this.canvas, this.scheme, selectedSet, this.errorPartIds, function(id, ox, oy, shiftKey) {
         if (AssemblyPlayerState.isActive) return;
         if (MeasurementState.isActive) return;
-        this.selected = id;
-        this.drag = { id, ox, oy };
+        if (shiftKey) {
+          SelectionManager.toggle(id);
+        } else {
+          SelectionManager.select(id);
+        }
+        this.drag = { id: id, ox: ox, oy: oy };
         this.renderAll();
-      }, renderOpts);
+      }.bind(this), renderOpts);
 
       AnnotationRenderer.render(this.canvas, measureState);
 
-      this.canvas.querySelectorAll(".annotation-group").forEach(el => {
-        el.onclick = event => {
+      this.canvas.querySelectorAll(".annotation-group").forEach(function(el) {
+        el.onclick = function(event) {
           event.stopPropagation();
           MeasurementState.selectAnnotation(el.dataset.annotationId);
         };
@@ -260,25 +327,25 @@ const App = {
     }
 
     if (!isAssemblyMode) {
-      Renderer.renderEditor(this.editor, this.scheme, this.selected,
-        editorOpts => {
+      Renderer.renderEditor(this.editor, this.scheme, selectedSet,
+        function(editorOpts) {
           this.refreshPlayerSteps();
           this.renderAll(editorOpts || {});
-        },
-        id => {
-          this.scheme = this.scheme.filter(x => x.id !== id);
-          this.selected = "";
+        }.bind(this),
+        function(id) {
+          this.scheme = this.scheme.filter(function(x) { return x.id !== id; });
+          SelectionManager.removeFromSelection(id);
           this.refreshPlayerSteps();
           this.renderAll();
-        }
+        }.bind(this)
       );
     }
 
     if (!opts.editorOnly) {
       if (!isAssemblyMode) {
         Renderer.renderTree(this.tree, this.scheme);
-        const checkResult = Renderer.renderChecks(this.checks, this.scheme, this.parts,
-          id => this.selectPartById(id)
+        var checkResult = Renderer.renderChecks(this.checks, this.scheme, this.parts,
+          function(id) { this.selectPartById(id); }.bind(this)
         );
         this.errorPartIds = checkResult.errorPartIds;
       }
@@ -287,19 +354,19 @@ const App = {
     AnnotationRenderer.renderMeasurementPanel(
       this.measurementPanel,
       measureState,
-      id => MeasurementState.removeAnnotation(id),
-      id => MeasurementState.selectAnnotation(id),
-      (px, unit) => MeasurementState.setScale(px, unit)
+      function(id) { MeasurementState.removeAnnotation(id); },
+      function(id) { MeasurementState.selectAnnotation(id); },
+      function(px, unit) { MeasurementState.setScale(px, unit); }
     );
+
+    BatchPanel.render(SelectionManager.count());
   },
 
   selectPartById(id) {
-    this.selected = id;
-    const part = this.scheme.find(p => p.id === id);
+    SelectionManager.select(id);
+    var part = this.scheme.find(function(p) { return p.id === id; });
     if (part) {
-      const rect = this.canvas.getBoundingClientRect();
-      const zoom = Number(this.zoomInput.value) / 100;
-      const partEl = this.canvas.querySelector('.part[data-id="' + id + '"]');
+      var partEl = this.canvas.querySelector('.part[data-id="' + id + '"]');
       if (partEl) {
         partEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
       }
@@ -308,24 +375,26 @@ const App = {
   },
 
   addPart(type) {
-    this.scheme.push({
+    var newPart = {
       id: crypto.randomUUID(),
-      type,
+      type: type,
       x: 460 + Math.random() * 120,
       y: 320 + Math.random() * 80,
       layer: 1,
       dir: "正",
       connect: ""
-    });
+    };
+    this.scheme.push(newPart);
+    SelectionManager.select(newPart.id);
     this.refreshPlayerSteps();
     this.renderAll();
   },
 
   loadTemplate(tplId) {
-    const tpl = DOUGONG_TEMPLATES.find(t => t.id === tplId);
+    var tpl = DOUGONG_TEMPLATES.find(function(t) { return t.id === tplId; });
     if (!tpl) return;
-    this.scheme = tpl.parts.map(p => ({ id: crypto.randomUUID(), ...p }));
-    this.selected = "";
+    this.scheme = tpl.parts.map(function(p) { return { id: crypto.randomUUID(), type: p.type, x: p.x, y: p.y, layer: p.layer, dir: p.dir, connect: p.connect }; });
+    SelectionManager.clear();
     this.refreshPlayerSteps();
     this.renderAll();
   },
@@ -345,18 +414,18 @@ const App = {
   },
 
   applyImportedScheme(parts) {
-    const MAX_LAYER = 16;
-    const MIN_LAYER = 1;
-    const VALID_DIRS = ["正", "左挑", "右挑"];
-    this.scheme = parts.map(p => {
-      const item = { ...p };
+    var MAX_LAYER = 16;
+    var MIN_LAYER = 1;
+    var VALID_DIRS = ["正", "左挑", "右挑"];
+    this.scheme = parts.map(function(p) {
+      var item = Object.assign({}, p);
       if (!item.id || typeof item.id !== "string" || item.id.trim() === "") {
         item.id = crypto.randomUUID();
       }
       if (item.layer === undefined || item.layer === null || isNaN(Number(item.layer))) {
         item.layer = MIN_LAYER;
       } else {
-        const n = Math.round(Number(item.layer));
+        var n = Math.round(Number(item.layer));
         item.layer = (n < MIN_LAYER || n > MAX_LAYER) ? Math.min(MAX_LAYER, Math.max(MIN_LAYER, n)) : n;
       }
       if (item.x === undefined || item.x === null || isNaN(Number(item.x))) {
@@ -381,7 +450,7 @@ const App = {
       }
       return item;
     });
-    this.selected = "";
+    SelectionManager.clear();
 
     if (this._pendingImportMeasurement && this._pendingImportMeasurement.measurement) {
       var m = this._pendingImportMeasurement.measurement;
@@ -396,4 +465,4 @@ const App = {
   }
 };
 
-document.addEventListener("DOMContentLoaded", () => App.init());
+document.addEventListener("DOMContentLoaded", function() { App.init(); });
