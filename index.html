@@ -11,6 +11,9 @@
   <link rel="stylesheet" href="css/batch.css">
   <link rel="stylesheet" href="css/schemeVersion.css">
   <link rel="stylesheet" href="css/componentDetail.css">
+  <link rel="stylesheet" href="css/preview3D.css">
+  <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
   <header>
@@ -24,6 +27,7 @@
       <h2>构件库</h2>
       <div class="library" id="library"></div>
       <h2>视图</h2>
+      <button id="viewToggleBtn" class="secondary">切换3D预览</button>
       <button id="explodeBtn" class="secondary">切换爆炸图</button>
       <label>缩放</label><input id="zoom" type="range" min="45" max="110" value="75">
       <h2>尺寸标注</h2>
@@ -37,6 +41,10 @@
     <section class="panel canvasWrap">
       <div id="playerControls"></div>
       <div class="canvas" id="canvas"></div>
+      <div class="canvas3D-wrap" id="canvas3DWrap">
+        <div class="canvas3D-hint">拖拽旋转 · 滚轮缩放 · 右键平移</div>
+        <canvas class="canvas3D" id="canvas3D"></canvas>
+      </div>
     </section>
     <aside class="panel">
       <h2>装配步骤演示</h2>
@@ -71,6 +79,9 @@
   <script src="js/schemeStorage.js"></script>
   <script src="js/schemeState.js"></script>
   <script src="js/schemeVersionUI.js"></script>
+  <script src="js/model3DBuilder.js"></script>
+  <script src="js/threeScene.js"></script>
+  <script src="js/preview3D.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

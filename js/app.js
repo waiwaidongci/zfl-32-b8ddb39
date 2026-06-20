@@ -19,6 +19,8 @@ const App = {
   batchPanel: null,
   schemeVersionPanel: null,
   schemeVersionUnsubscribe: null,
+  viewToggleBtn: null,
+  canvas3DWrap: null,
 
   scheme: [],
   drag: null,
@@ -50,6 +52,10 @@ const App = {
     this.measurementPanel = document.querySelector("#measurementPanel");
     this.batchPanel = document.querySelector("#batchPanel");
     this.schemeVersionPanel = document.querySelector("#schemeVersionPanel");
+    this.viewToggleBtn = document.querySelector("#viewToggleBtn");
+    this.canvas3DWrap = document.querySelector("#canvas3DWrap");
+
+    this._initPreview3D();
 
     this._initSchemeState();
 
@@ -76,6 +82,28 @@ const App = {
         { id: crypto.randomUUID(), type: "华拱", x: 495, y: 450, layer: 2, dir: "正", connect: "下承" }
       ];
     }
+  },
+
+  _initPreview3D() {
+    var self = this;
+    Preview3D.init({
+      onSelectPart: function(partId, shiftKey) {
+        if (shiftKey) {
+          SelectionManager.toggle(partId);
+        } else {
+          SelectionManager.select(partId);
+        }
+        self.renderAll();
+      }
+    });
+
+    SelectionManager.subscribe(function() {
+      Preview3D.setHighlightedIds(SelectionManager.getIds());
+    });
+
+    window.addEventListener("resize", function() {
+      Preview3D.handleResize();
+    });
   },
 
   _getCurrentMeasurementData() {
@@ -315,7 +343,10 @@ const App = {
     this.zoomInput.oninput = function(e) { this.canvas.style.transform = "scale(" + (Number(e.target.value) / 100) + ")"; }.bind(this);
     this.zoomInput.dispatchEvent(new Event("input"));
 
-    this.explodeBtn.onclick = function() { this.canvas.classList.toggle("exploded"); }.bind(this);
+    this.explodeBtn.onclick = function() {
+      var isExploded = this.canvas.classList.toggle("exploded");
+      Preview3D.setExploded(isExploded);
+    }.bind(this);
     this.saveBtn.onclick = function() {
       var name = SchemeState.currentSchemeName;
       if (!name) {
@@ -479,6 +510,9 @@ const App = {
 
     var measurementData = this._getCurrentMeasurementData();
     SchemeState.updateCurrent(this.scheme, measurementData);
+
+    Preview3D.updateScheme(this.scheme);
+    Preview3D.setHighlightedIds(selectedSet);
 
     this._updateSaveButton();
   },
