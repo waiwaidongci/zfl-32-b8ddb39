@@ -443,7 +443,7 @@ const App = {
     }
 
     if (!isAssemblyMode) {
-      Renderer.renderEditor(this.editor, this.scheme, selectedSet,
+      ComponentEditor.renderEditor(this.editor, this.scheme, selectedSet,
         function(editorOpts) {
           this.refreshPlayerSteps();
           this.renderAll(editorOpts || {});
