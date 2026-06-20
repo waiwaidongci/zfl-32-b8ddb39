@@ -17,6 +17,8 @@ const App = {
   measureBtn: null,
   measurementPanel: null,
   batchPanel: null,
+  schemeVersionPanel: null,
+  schemeVersionUnsubscribe: null,
 
   scheme: [],
   drag: null,
@@ -47,18 +49,121 @@ const App = {
     this.measureBtn = document.querySelector("#measureBtn");
     this.measurementPanel = document.querySelector("#measurementPanel");
     this.batchPanel = document.querySelector("#batchPanel");
+    this.schemeVersionPanel = document.querySelector("#schemeVersionPanel");
 
-    this.scheme = JSON.parse(localStorage.getItem("zfl32Scheme") || "null") || [
-      { id: crypto.randomUUID(), type: "栌斗", x: 520, y: 520, layer: 1, dir: "正", connect: "柱头" },
-      { id: crypto.randomUUID(), type: "华拱", x: 495, y: 450, layer: 2, dir: "正", connect: "下承" }
-    ];
+    this._initSchemeState();
 
     SelectionManager.init();
     this.initBatch();
     this.initMeasurement();
     this.bindEvents();
     this.initPlayer();
+    this.initSchemeVersion();
     this.renderAll();
+  },
+
+  _initSchemeState() {
+    SchemeState.init();
+    var current = SchemeState.getCurrentSchemeData();
+
+    if (current && current.scheme && current.scheme.length > 0) {
+      this.scheme = current.scheme.map(function(p) {
+        return Object.assign({}, p);
+      });
+    } else {
+      this.scheme = [
+        { id: crypto.randomUUID(), type: "栌斗", x: 520, y: 520, layer: 1, dir: "正", connect: "柱头" },
+        { id: crypto.randomUUID(), type: "华拱", x: 495, y: 450, layer: 2, dir: "正", connect: "下承" }
+      ];
+    }
+  },
+
+  _getCurrentMeasurementData() {
+    return MeasurementSerializer.serialize(
+      MeasurementState.getAnnotations(),
+      MeasurementState.getScale()
+    );
+  },
+
+  _applyMeasurementData(measurementData) {
+    if (measurementData) {
+      var deserialized = MeasurementSerializer.deserialize(measurementData);
+      MeasurementState.init(deserialized.annotations, deserialized.scale);
+    } else {
+      MeasurementState.init([], null);
+    }
+  },
+
+  hasUnsavedChanges() {
+    var measurementData = this._getCurrentMeasurementData();
+    return SchemeState.hasUnsavedChanges(this.scheme, measurementData);
+  },
+
+  initSchemeVersion() {
+    var self = this;
+    SchemeVersionUI.init("#schemeVersionPanel", {
+      hasUnsavedChanges: function() { return self.hasUnsavedChanges(); },
+      onLoadScheme: function(data) { self._onLoadScheme(data); },
+      onSaveAs: function(name) { self._onSaveAs(name); },
+      onNewScheme: function(name) { self._onNewScheme(name); },
+      onClearCurrent: function() { self._onClearCurrent(); }
+    });
+
+    this.schemeVersionUnsubscribe = SchemeState.subscribe(function() {
+      self._updateSaveButton();
+    });
+  },
+
+  _updateSaveButton() {
+    if (this.saveBtn) {
+      var hasUnsaved = this.hasUnsavedChanges();
+      this.saveBtn.textContent = hasUnsaved ? "保存方案 ●" : "保存方案";
+    }
+  },
+
+  _onLoadScheme(data) {
+    this.scheme = data.scheme.map(function(p) {
+      return Object.assign({}, p);
+    });
+    this._applyMeasurementData(data.measurement);
+    SelectionManager.clear();
+    this.refreshPlayerSteps();
+    this.renderAll();
+  },
+
+  _onSaveAs(name) {
+    var measurementData = this._getCurrentMeasurementData();
+    var result = SchemeState.createNew(name, this.scheme, measurementData);
+    if (result) {
+      this._updateSaveButton();
+      alert('方案已另存为 "' + name + '"。');
+    }
+  },
+
+  _onNewScheme(name) {
+    this.scheme = [
+      { id: crypto.randomUUID(), type: "栌斗", x: 520, y: 520, layer: 1, dir: "正", connect: "柱头" }
+    ];
+    this._applyMeasurementData(null);
+    SelectionManager.clear();
+
+    var measurementData = this._getCurrentMeasurementData();
+    SchemeState.createNew(name, this.scheme, measurementData);
+
+    this.refreshPlayerSteps();
+    this.renderAll();
+    this._updateSaveButton();
+  },
+
+  _onClearCurrent() {
+    this.scheme = [
+      { id: crypto.randomUUID(), type: "栌斗", x: 520, y: 520, layer: 1, dir: "正", connect: "柱头" }
+    ];
+    this._applyMeasurementData(null);
+    SelectionManager.clear();
+    this.refreshPlayerSteps();
+    this.renderAll();
+    this._updateSaveButton();
   },
 
   initBatch() {
@@ -77,9 +182,10 @@ const App = {
   },
 
   initMeasurement() {
-    var saved = MeasurementSerializer.loadFromLocalStorage();
-    if (saved) {
-      MeasurementState.init(saved.annotations, saved.scale);
+    var current = SchemeState.getCurrentSchemeData();
+    if (current && current.measurement) {
+      var deserialized = MeasurementSerializer.deserialize(current.measurement);
+      MeasurementState.init(deserialized.annotations, deserialized.scale);
     } else {
       MeasurementState.init([], null);
     }
@@ -211,11 +317,21 @@ const App = {
 
     this.explodeBtn.onclick = function() { this.canvas.classList.toggle("exploded"); }.bind(this);
     this.saveBtn.onclick = function() {
-      localStorage.setItem("zfl32Scheme", JSON.stringify(this.scheme));
-      MeasurementSerializer.saveToLocalStorage(
-        MeasurementState.getAnnotations(),
-        MeasurementState.getScale()
-      );
+      var name = SchemeState.currentSchemeName;
+      if (!name) {
+        name = prompt("请输入方案名称：", "未命名方案");
+        if (name === null) return;
+        name = name.trim();
+        if (!name) {
+          alert("方案名称不能为空。");
+          return;
+        }
+      }
+      var measurementData = this._getCurrentMeasurementData();
+      var result = SchemeState.saveCurrent(name, this.scheme, measurementData);
+      if (result) {
+        this._updateSaveButton();
+      }
     }.bind(this);
     this.exportBtn.onclick = function() { this.exportJSON(); }.bind(this);
     this.importBtn.onclick = function() { this.importFileInput.click(); }.bind(this);
@@ -360,6 +476,11 @@ const App = {
     );
 
     BatchPanel.render(SelectionManager.count());
+
+    var measurementData = this._getCurrentMeasurementData();
+    SchemeState.updateCurrent(this.scheme, measurementData);
+
+    this._updateSaveButton();
   },
 
   selectPartById(id) {
@@ -391,10 +512,16 @@ const App = {
   },
 
   loadTemplate(tplId) {
+    if (this.hasUnsavedChanges()) {
+      var ok = confirm("当前方案有未保存的改动，加载模板将丢失这些改动。确定要继续吗？");
+      if (!ok) return;
+    }
     var tpl = DOUGONG_TEMPLATES.find(function(t) { return t.id === tplId; });
     if (!tpl) return;
     this.scheme = tpl.parts.map(function(p) { return { id: crypto.randomUUID(), type: p.type, x: p.x, y: p.y, layer: p.layer, dir: p.dir, connect: p.connect }; });
+    this._applyMeasurementData(null);
     SelectionManager.clear();
+    SchemeState.clearCurrent();
     this.refreshPlayerSteps();
     this.renderAll();
   },
@@ -414,6 +541,11 @@ const App = {
   },
 
   applyImportedScheme(parts) {
+    if (this.hasUnsavedChanges()) {
+      var ok = confirm("当前方案有未保存的改动，导入新方案将丢失这些改动。确定要继续吗？");
+      if (!ok) return;
+    }
+
     var MAX_LAYER = 16;
     var MIN_LAYER = 1;
     var VALID_DIRS = ["正", "左挑", "右挑"];
@@ -459,6 +591,8 @@ const App = {
       MeasurementState.init([], null);
     }
     this._pendingImportMeasurement = null;
+
+    SchemeState.clearCurrent();
 
     this.refreshPlayerSteps();
     this.renderAll();
