@@ -6,10 +6,10 @@ const DOUGONG_TEMPLATES = [
     partsCount: 4,
     description: "最基础的斗拱结构，由栌斗承托华拱，两端施散斗，适用于小型殿宇。",
     parts: [
-      { type: "栌斗", x: 560, y: 560, layer: 1, dir: "正", connect: "柱头" },
-      { type: "华拱", x: 535, y: 490, layer: 2, dir: "正", connect: "下承" },
-      { type: "散斗", x: 470, y: 468, layer: 3, dir: "正", connect: "华拱左端" },
-      { type: "散斗", x: 660, y: 468, layer: 3, dir: "正", connect: "华拱右端" }
+      { type: "栌斗", x: 523, y: 580, layer: 1, dir: "正", connect: "柱头" },
+      { type: "华拱", x: 498, y: 520, layer: 2, dir: "正", connect: "下承栌斗" },
+      { type: "散斗", x: 505, y: 482, layer: 3, dir: "正", connect: "华拱左端" },
+      { type: "散斗", x: 607, y: 482, layer: 3, dir: "正", connect: "华拱右端" }
     ]
   },
   {
@@ -19,14 +19,14 @@ const DOUGONG_TEMPLATES = [
     partsCount: 8,
     description: "宋《营造法式》标准形制，华拱出跳加下昂，结构均衡，广泛用于殿身。",
     parts: [
-      { type: "栌斗", x: 560, y: 600, layer: 1, dir: "正", connect: "柱头" },
-      { type: "华拱", x: 535, y: 540, layer: 2, dir: "正", connect: "下承" },
-      { type: "散斗", x: 470, y: 518, layer: 3, dir: "正", connect: "华拱左端" },
-      { type: "散斗", x: 660, y: 518, layer: 3, dir: "正", connect: "华拱右端" },
-      { type: "昂", x: 540, y: 470, layer: 4, dir: "正", connect: "下承华拱" },
-      { type: "散斗", x: 490, y: 448, layer: 5, dir: "左挑", connect: "昂前端" },
-      { type: "耍头", x: 555, y: 400, layer: 5, dir: "正", connect: "昂后尾" },
-      { type: "散斗", x: 680, y: 448, layer: 5, dir: "右挑", connect: "耍头前端" }
+      { type: "栌斗", x: 523, y: 620, layer: 1, dir: "正", connect: "柱头" },
+      { type: "华拱", x: 498, y: 560, layer: 2, dir: "正", connect: "下承栌斗" },
+      { type: "散斗", x: 505, y: 522, layer: 3, dir: "正", connect: "华拱左端" },
+      { type: "散斗", x: 607, y: 522, layer: 3, dir: "正", connect: "华拱右端" },
+      { type: "昂", x: 504, y: 480, layer: 4, dir: "正", connect: "下承华拱" },
+      { type: "散斗", x: 492, y: 445, layer: 5, dir: "左挑", connect: "昂前端" },
+      { type: "耍头", x: 514, y: 442, layer: 5, dir: "正", connect: "昂后尾" },
+      { type: "散斗", x: 588, y: 445, layer: 5, dir: "右挑", connect: "耍头前端" }
     ]
   },
   {
@@ -36,19 +36,19 @@ const DOUGONG_TEMPLATES = [
     partsCount: 13,
     description: "高等级斗拱形制，双抄双昂出四跳，用于宫殿、寺观等重要建筑的柱头。",
     parts: [
-      { type: "栌斗", x: 560, y: 640, layer: 1, dir: "正", connect: "柱头" },
-      { type: "华拱", x: 535, y: 590, layer: 2, dir: "正", connect: "下承栌斗" },
-      { type: "散斗", x: 455, y: 568, layer: 3, dir: "正", connect: "华拱左端" },
-      { type: "散斗", x: 665, y: 568, layer: 3, dir: "正", connect: "华拱右端" },
-      { type: "华拱", x: 535, y: 520, layer: 4, dir: "正", connect: "下承第一跳" },
-      { type: "散斗", x: 425, y: 498, layer: 5, dir: "左挑", connect: "二跳华拱左端" },
-      { type: "散斗", x: 695, y: 498, layer: 5, dir: "右挑", connect: "二跳华拱右端" },
-      { type: "昂", x: 540, y: 450, layer: 6, dir: "正", connect: "下承二跳" },
-      { type: "散斗", x: 405, y: 428, layer: 7, dir: "左挑", connect: "昂一跳前端" },
-      { type: "散斗", x: 715, y: 428, layer: 7, dir: "右挑", connect: "昂一跳后尾" },
-      { type: "昂", x: 540, y: 380, layer: 8, dir: "正", connect: "下承第一昂" },
-      { type: "耍头", x: 555, y: 310, layer: 9, dir: "正", connect: "第二昂后尾" },
-      { type: "散斗", x: 380, y: 288, layer: 9, dir: "左挑", connect: "二昂前端" }
+      { type: "栌斗", x: 523, y: 680, layer: 1, dir: "正", connect: "柱头" },
+      { type: "华拱", x: 498, y: 620, layer: 2, dir: "正", connect: "下承栌斗" },
+      { type: "散斗", x: 505, y: 582, layer: 3, dir: "正", connect: "头跳华拱左端" },
+      { type: "散斗", x: 607, y: 582, layer: 3, dir: "正", connect: "头跳华拱右端" },
+      { type: "华拱", x: 478, y: 540, layer: 4, dir: "正", connect: "下承第一跳" },
+      { type: "散斗", x: 482, y: 502, layer: 5, dir: "左挑", connect: "二跳华拱左端" },
+      { type: "散斗", x: 585, y: 502, layer: 5, dir: "右挑", connect: "二跳华拱右端" },
+      { type: "昂", x: 475, y: 460, layer: 6, dir: "正", connect: "下承二跳华拱" },
+      { type: "散斗", x: 478, y: 422, layer: 7, dir: "左挑", connect: "头昂前端" },
+      { type: "散斗", x: 568, y: 422, layer: 7, dir: "右挑", connect: "头昂后尾" },
+      { type: "昂", x: 462, y: 385, layer: 8, dir: "正", connect: "下承头昂" },
+      { type: "耍头", x: 470, y: 348, layer: 9, dir: "正", connect: "二昂后尾" },
+      { type: "散斗", x: 460, y: 347, layer: 9, dir: "左挑", connect: "二昂前端" }
     ]
   }
 ];

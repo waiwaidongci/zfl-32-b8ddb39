@@ -1,3 +1,23 @@
+const PART_SIZES = {
+  "栌斗": { w: 74, h: 52 },
+  "华拱": { w: 124, h: 34 },
+  "昂": { w: 112, h: 28 },
+  "耍头": { w: 92, h: 32 },
+  "散斗": { w: 48, h: 38 }
+};
+
+function partsAreSupported(upper, lower) {
+  const us = PART_SIZES[upper.type] || { w: 60, h: 40 };
+  const ls = PART_SIZES[lower.type] || { w: 60, h: 40 };
+  const uLeft = upper.x, uRight = upper.x + us.w;
+  const lLeft = lower.x, lRight = lower.x + ls.w;
+  const overlapX = Math.min(uRight, lRight) - Math.max(uLeft, lLeft);
+  const uBottom = upper.y + us.h;
+  const lTop = lower.y;
+  const gapY = lTop - uBottom;
+  return overlapX > -12 && gapY > -20 && gapY < 80;
+}
+
 const Renderer = {
   render(canvas, scheme, selected, onSelect) {
     canvas.innerHTML = scheme.map(p =>
@@ -55,7 +75,7 @@ const Renderer = {
     const issues = [];
     for (const p of scheme) {
       if (p.layer > 1 && !scheme.some(o =>
-        o.layer === p.layer - 1 && Math.abs(o.x - p.x) < 95 && Math.abs(o.y - p.y) < 95
+        o.layer === p.layer - 1 && partsAreSupported(p, o)
       )) {
         issues.push(p.type + "第" + p.layer + "层可能悬空");
       }
