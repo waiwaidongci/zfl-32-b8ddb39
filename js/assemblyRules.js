@@ -153,7 +153,7 @@ const AssemblyRules = {
       }
     }
 
-    const mentionedTypes = this.extractMentionedPartTypes(connectText);
+    const mentionedTypes = this.extractMentionedPartTypes(connectText).filter(t => t !== part.type);
     const others = scheme.filter(p => p.id !== part.id);
 
     if (mentionedTypes.length > 0) {
