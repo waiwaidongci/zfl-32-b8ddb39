@@ -11,6 +11,27 @@ const ComponentEditor = {
       ? ' <span class="batch-info" style="font-size:12px;color:#8d3d2d">（已选' + selectedIds.size + '项）</span>'
       : '';
 
+    var suggestions = [];
+    try {
+      suggestions = AutoLayoutConstraintModel.generateConnectSuggestions(p, scheme) || [];
+    } catch (e) {
+      suggestions = [];
+    }
+
+    var suggestionHtml = '';
+    if (suggestions.length > 0) {
+      suggestionHtml = `
+        <div class="connect-suggestions-wrapper">
+          <div class="connect-suggestions-label">快速建议</div>
+          <div class="connect-suggestions-list">
+            ${suggestions.map(function(s, i) {
+              return '<button class="connect-suggestion-btn" data-suggestion="' + s + '" data-idx="' + i + '">' + s + '</button>';
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
     var editorHtml = `
       <div class="component-editor-wrapper">
         <div class="editor-section">
@@ -26,6 +47,7 @@ const ComponentEditor = {
             </select>
             <label>连接点</label>
             <input id="connectInput" value="${p.connect}">
+            ${suggestionHtml}
             <button id="deleteBtn" class="secondary">删除构件</button>
           </div>
         </div>
@@ -67,6 +89,34 @@ const ComponentEditor = {
         p.connect = e.target.value;
         onChange({ treeAndChecksOnly: true });
       };
+    }
+
+    var suggestionBtns = editor.querySelectorAll(".connect-suggestion-btn");
+    if (suggestionBtns && suggestionBtns.length > 0) {
+      suggestionBtns.forEach(function(btn) {
+        btn.onclick = function() {
+          var value = btn.dataset.suggestion;
+          if (value === undefined || value === null) return;
+
+          if (connectInput) {
+            connectInput.value = value;
+          }
+          p.connect = value;
+
+          var activeBtn = editor.querySelector(".connect-suggestion-btn.active");
+          if (activeBtn) activeBtn.classList.remove("active");
+          btn.classList.add("active");
+
+          onChange({ treeAndChecksOnly: true });
+        };
+      });
+
+      if (p.connect) {
+        var matchedBtn = Array.from(suggestionBtns).find(function(b) {
+          return b.dataset.suggestion === p.connect;
+        });
+        if (matchedBtn) matchedBtn.classList.add("active");
+      }
     }
 
     var deleteBtn = document.querySelector("#deleteBtn");

@@ -138,6 +138,90 @@ const AssemblyRules = {
     const nearX = overlapX > -this.SAME_LAYER_CONNECTION_GAP_X || gapX < this.SAME_LAYER_CONNECTION_GAP_X;
     const nearY = overlapY > -this.SAME_LAYER_CONNECTION_GAP_Y || gapY < this.SAME_LAYER_CONNECTION_GAP_Y;
     return nearX && nearY;
+  },
+
+  validateConnectSuggestion(part, connectText, scheme) {
+    if (!connectText) return { valid: false, reason: "空连接点" };
+    if (part.layer === 1) {
+      if (connectText.includes("柱头")) {
+        if (part.type === "栌斗") return { valid: true, score: 100 };
+        return { valid: true, score: 60, reason: "非栌斗构件使用柱头" };
+      }
+    } else {
+      if (connectText.includes("柱头") && part.type !== "栌斗") {
+        return { valid: false, reason: "非首层非栌斗不应使用柱头" };
+      }
+    }
+
+    const mentionedTypes = this.extractMentionedPartTypes(connectText);
+    const others = scheme.filter(p => p.id !== part.id);
+
+    if (mentionedTypes.length > 0) {
+      let hasMatching = false;
+      let totalScore = 0;
+      let matchCount = 0;
+
+      for (const mt of mentionedTypes) {
+        const candidates = others.filter(o => o.type === mt);
+        for (const c of candidates) {
+          const partRect = this.getRect(part);
+          const targetRect = this.getRect(c);
+          const layerDelta = part.layer - c.layer;
+
+          if (layerDelta > 0 && layerDelta <= this.MAX_SUPPORT_SEARCH_LAYERS) {
+            const check = this.checkSupportOverlap(partRect, targetRect);
+            if (check.isSupported) {
+              hasMatching = true;
+              matchCount++;
+              totalScore += 70 + Math.min(check.overlapX * 0.5, 30);
+            }
+          } else if (layerDelta === 0) {
+            if (this.checkSameLayerConnection(partRect, targetRect)) {
+              hasMatching = true;
+              matchCount++;
+              totalScore += 50;
+            }
+          } else if (layerDelta < 0 && -layerDelta <= this.MAX_SUPPORT_SEARCH_LAYERS) {
+            const check = this.checkSupportOverlap(targetRect, partRect);
+            if (check.isSupported) {
+              hasMatching = true;
+              matchCount++;
+              totalScore += 40;
+            }
+          }
+        }
+      }
+
+      if (!hasMatching) {
+        return { valid: false, reason: "连接点提到的构件类型未在邻近位置找到", score: 10 };
+      }
+      const avgScore = totalScore / Math.max(matchCount, 1);
+      return { valid: true, score: Math.min(avgScore, 100) };
+    }
+
+    if (this.isDirectionalPart(part.type)) {
+      const dirCheck = this.selfDirMatchesConnect(part.dir, connectText, part.type);
+      if (!dirCheck.ok) {
+        return { valid: false, reason: "连接点方向与构件方向不一致", score: 20 };
+      }
+    }
+
+    return { valid: true, score: 35 };
+  },
+
+  filterConnectSuggestions(part, suggestions, scheme) {
+    const results = [];
+    for (const text of suggestions) {
+      const check = this.validateConnectSuggestion(part, text, scheme);
+      results.push({
+        text: text,
+        valid: check.valid,
+        score: check.score || 0,
+        reason: check.reason || ""
+      });
+    }
+    results.sort((a, b) => b.score - a.score);
+    return results.filter(r => r.valid).slice(0, 3);
   }
 };
 

@@ -340,6 +340,147 @@ const AutoLayoutConstraintModel = (function() {
     return false;
   }
 
+  function generateConnectSuggestions(part, scheme) {
+    var suggestions = [];
+    var seen = {};
+
+    function addSuggestion(text, score, source) {
+      if (!text || seen[text]) return;
+      seen[text] = true;
+      suggestions.push({ text: text, score: score || 0, source: source || "general" });
+    }
+
+    if (part.layer === 1) {
+      addSuggestion("柱头", 100, "layer1");
+      if (part.type === "栌斗") {
+        addSuggestion("柱头正中", 90, "layer1");
+      }
+    }
+
+    var others = scheme.filter(function(p) { return p.id !== part.id; });
+    var allSupporters = findAllSupporters(part, others);
+
+    if (allSupporters.length > 0) {
+      var directSupporters = allSupporters.filter(function(s) { return s.isDirectLayer; });
+      var primary = directSupporters.length > 0 ? directSupporters : allSupporters;
+
+      for (var si = 0; si < Math.min(primary.length, 3); si++) {
+        var sup = primary[si];
+        var sPart = sup.part;
+        var sSize = AssemblyRules.getSize(sPart.type);
+        var pSize = AssemblyRules.getSize(part.type);
+        var sCenterX = sPart.x + sSize.w / 2;
+        var pCenterX = part.x + pSize.w / 2;
+        var offset = pCenterX - sCenterX;
+        var absOffset = Math.abs(offset);
+        var baseScore = sup.score + (sup.isDirectLayer ? 50 : 0);
+
+        if (absOffset < 15 || absOffset < sSize.w * 0.12) {
+          addSuggestion("下承" + sPart.type, baseScore + 80, "support_center");
+          addSuggestion(sPart.type + "正中", baseScore + 40, "support_center");
+        } else if (offset < -sSize.w * 0.3) {
+          addSuggestion(sPart.type + "左端", baseScore + 70, "support_left_end");
+          addSuggestion("下承" + sPart.type + "左部", baseScore + 35, "support_left");
+        } else if (offset > sSize.w * 0.3) {
+          addSuggestion(sPart.type + "右端", baseScore + 70, "support_right_end");
+          addSuggestion("下承" + sPart.type + "右部", baseScore + 35, "support_right");
+        } else if (offset < 0) {
+          addSuggestion(sPart.type + "左部", baseScore + 60, "support_left");
+          addSuggestion("下承" + sPart.type + "左部", baseScore + 30, "support_left");
+        } else {
+          addSuggestion(sPart.type + "右部", baseScore + 60, "support_right");
+          addSuggestion("下承" + sPart.type + "右部", baseScore + 30, "support_right");
+        }
+      }
+
+      if (primary.length >= 2) {
+        var second = primary[1];
+        if (second.isEnough || second.overlapX >= MIN_OVERLAP_FOR_SUPPORT * 0.6) {
+          var firstType = primary[0].part.type;
+          var secondType = second.part.type;
+          if (firstType !== secondType) {
+            addSuggestion("下承" + firstType + "兼承" + secondType, 55, "multi_support");
+          }
+        }
+      }
+    }
+
+    var sameLayerNeighbors = others.filter(function(p) {
+      if (p.layer !== part.layer) return false;
+      var rectA = AssemblyRules.getRect(part);
+      var rectB = AssemblyRules.getRect(p);
+      return AssemblyRules.checkSameLayerConnection(rectA, rectB);
+    });
+
+    if (sameLayerNeighbors.length > 0) {
+      var pSize2 = AssemblyRules.getSize(part.type);
+      var pCenter2 = part.x + pSize2.w / 2;
+
+      for (var ni = 0; ni < sameLayerNeighbors.length; ni++) {
+        var neighbor = sameLayerNeighbors[ni];
+        var nSize = AssemblyRules.getSize(neighbor.type);
+        var nCenter = neighbor.x + nSize.w / 2;
+        var neighborScore = 30;
+
+        if (nCenter < pCenter2 - 20) {
+          addSuggestion("与" + neighbor.type + "左端邻接", neighborScore, "same_layer_left");
+        } else if (nCenter > pCenter2 + 20) {
+          addSuggestion("与" + neighbor.type + "右端邻接", neighborScore, "same_layer_right");
+        } else {
+          addSuggestion("与" + neighbor.type + "并列", neighborScore, "same_layer");
+        }
+      }
+    }
+
+    if (AssemblyRules.isDirectionalPart(part.type)) {
+      if (part.dir === "左挑") {
+        addSuggestion("向左挑出", 25, "direction");
+      } else if (part.dir === "右挑") {
+        addSuggestion("向右挑出", 25, "direction");
+      }
+    }
+
+    var typeDefaults = {
+      "华拱": ["跨承" + (allSupporters[0] ? allSupporters[0].part.type : "栌斗"), "华拱正身"],
+      "昂": ["昂身下承" + (allSupporters[0] ? allSupporters[0].part.type : "栌斗"), "昂尾挑出"],
+      "耍头": ["耍头承" + (allSupporters[0] ? allSupporters[0].part.type : "散斗"), "耍头正出"],
+      "散斗": ["散斗承托", "交互斗"],
+      "栌斗": ["栌斗坐柱头", "大斗"]
+    };
+    if (typeDefaults[part.type]) {
+      for (var di = 0; di < typeDefaults[part.type].length; di++) {
+        addSuggestion(typeDefaults[part.type][di], 10, "type_default");
+      }
+    }
+
+    suggestions.sort(function(a, b) { return b.score - a.score; });
+
+    var rawTexts = [];
+    for (var ri = 0; ri < suggestions.length && rawTexts.length < 6; ri++) {
+      rawTexts.push(suggestions[ri].text);
+    }
+
+    if (rawTexts.length === 0 && part.layer > 1) {
+      var lowerAny = others.filter(function(p) { return p.layer < part.layer; });
+      if (lowerAny.length > 0) {
+        lowerAny.sort(function(a, b) { return b.layer - a.layer; });
+        rawTexts.push("下承" + lowerAny[0].type);
+        if (lowerAny.length > 1) rawTexts.push(lowerAny[1].type + "上方");
+      } else {
+        rawTexts.push("待指定");
+      }
+    }
+
+    var validated = AssemblyRules.filterConnectSuggestions(part, rawTexts, scheme);
+    var result = validated.map(function(v) { return v.text; });
+
+    if (result.length === 0) {
+      result = rawTexts.slice(0, 3);
+    }
+
+    return result.slice(0, 3);
+  }
+
   return {
     CENTER_X: CENTER_X,
     BASE_Y: BASE_Y,
@@ -358,6 +499,7 @@ const AutoLayoutConstraintModel = (function() {
     findBestSupporter: findBestSupporter,
     findAllSupporters: findAllSupporters,
     generateConnectString: generateConnectString,
+    generateConnectSuggestions: generateConnectSuggestions,
     getSymmetryAxis: getSymmetryAxis,
     mirrorPart: mirrorPart,
     checkSymmetryPair: checkSymmetryPair
