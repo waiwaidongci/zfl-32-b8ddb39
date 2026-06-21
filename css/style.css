@@ -282,16 +282,22 @@ label { display: block; margin: 9px 0 5px; color: #76695c; font-size: 13px; }
   border: 2px dashed;
   border-radius: inherit;
   z-index: 100;
+  left: 0;
+  top: 0;
 }
 
 .preview-new-position {
   width: 100%;
   height: 100%;
-  left: 0;
-  top: 0;
   border-color: rgba(33, 150, 243, 0.9);
   background: rgba(33, 150, 243, 0.15);
-  transform: translate(calc(var(--preview-left, 0px) - var(--original-left, 0px)), calc(var(--preview-top, 0px) - var(--original-top, 0px)));
+  transform-origin: center center;
+  animation: preview-overlay-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes preview-overlay-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 0.55; }
 }
 
 .ghost-original {

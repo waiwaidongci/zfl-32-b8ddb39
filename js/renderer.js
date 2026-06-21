@@ -50,8 +50,10 @@ const Renderer = {
         if (positionAdjustSet.has(p.id)) {
           previewClass = " preview-position-adjust";
           const pos = previewPositions[p.id];
-          previewStyle = ';--preview-left:' + pos.x + 'px;--preview-top:' + pos.y + 'px';
-          overlayHtml = '<div class="preview-overlay preview-new-position" style="left:' + pos.x + 'px;top:' + pos.y + 'px"></div>';
+          const offsetX = pos.x - p.x;
+          const offsetY = pos.y - p.y;
+          previewStyle = ';--preview-offset-x:' + offsetX + 'px;--preview-offset-y:' + offsetY + 'px';
+          overlayHtml = '<div class="preview-overlay preview-new-position" style="transform: translate(' + offsetX + 'px, ' + offsetY + 'px)"></div>';
         }
         if (connectUpdateSet.has(p.id) && !positionAdjustSet.has(p.id)) {
           previewClass = " preview-connect-update";
