@@ -9,9 +9,56 @@ if (typeof globalThis.crypto === "undefined" || !globalThis.crypto.randomUUID) {
 const path = require("path");
 const assert = require("assert");
 
-const { ImportParser } = require(path.join(__dirname, "..", "js", "importParser.js"));
-const { ImportValidator } = require(path.join(__dirname, "..", "js", "importValidator.js"));
-const { SchemeDiff } = require(path.join(__dirname, "..", "js", "schemeDiff.js"));
+function loadModules() {
+  const jsDir = path.join(__dirname, "..", "js");
+  const order = [
+    "templates.js",
+    "assemblyRules.js",
+    "assemblyChecker.js",
+    "selectionManager.js",
+    "geometryTransform.js",
+    "measurementState.js",
+    "measurementSerializer.js",
+    "assemblyStepCalculator.js",
+    "importParser.js",
+    "importValidator.js",
+    "schemeDiff.js",
+    "assemblyPlayerState.js",
+    "schemeStorage.js",
+    "schemeState.js",
+    "stateSnapshotManager.js",
+    "diffModeManager.js",
+    "autoLayoutConstraintModel.js",
+    "autoLayoutEngine.js",
+    "autoLayoutConflictDetector.js"
+  ];
+
+  const modules = {};
+  order.forEach(fileName => {
+    const mod = require(path.join(jsDir, fileName));
+    Object.keys(mod).forEach(key => {
+      globalThis[key] = mod[key];
+      modules[key] = mod[key];
+    });
+  });
+
+  return modules;
+}
+
+const modules = loadModules();
+const {
+  ImportParser,
+  ImportValidator,
+  SchemeDiff,
+  AssemblyRules,
+  AssemblyChecker,
+  AssemblyStepCalculator,
+  MeasurementSerializer,
+  GeometryTransform,
+  AutoLayoutConstraintModel,
+  AutoLayoutEngine,
+  AutoLayoutConflictDetector
+} = modules;
 
 const tests = [];
 let passed = 0;
@@ -600,6 +647,448 @@ test("SchemeDiff.compare: 比例尺变化", function () {
 });
 
 // ============================================================
+// AssemblyRules
+// ============================================================
+
+test("AssemblyRules.getSize: 返回正确的构件尺寸", function () {
+  const lugDouSize = AssemblyRules.getSize("栌斗");
+  equal(lugDouSize.w, 74);
+  equal(lugDouSize.h, 52);
+
+  const huaGongSize = AssemblyRules.getSize("华拱");
+  equal(huaGongSize.w, 124);
+  equal(huaGongSize.h, 34);
+});
+
+test("AssemblyRules.getSize: 未知类型返回默认尺寸", function () {
+  const size = AssemblyRules.getSize("未知构件");
+  equal(size.w, 60);
+  equal(size.h, 40);
+});
+
+test("AssemblyRules.getRect: 基于坐标和尺寸计算矩形", function () {
+  const part = { id: "p1", type: "栌斗", x: 100, y: 200, layer: 1 };
+  const rect = AssemblyRules.getRect(part);
+  equal(rect.left, 100);
+  equal(rect.top, 200);
+  equal(rect.right, 174);
+  equal(rect.bottom, 252);
+  equal(rect.w, 74);
+  equal(rect.h, 52);
+});
+
+test("AssemblyRules.canSupport: 正确判断承托关系", function () {
+  equal(AssemblyRules.canSupport("栌斗", "华拱"), true);
+  equal(AssemblyRules.canSupport("栌斗", "昂"), true);
+  equal(AssemblyRules.canSupport("散斗", "华拱"), true);
+  equal(AssemblyRules.canSupport("耍头", "栌斗"), false);
+  equal(AssemblyRules.canSupport("未知类型", "华拱"), false);
+});
+
+test("AssemblyRules.isDirectionalPart: 判断方向性构件", function () {
+  equal(AssemblyRules.isDirectionalPart("昂"), true);
+  equal(AssemblyRules.isDirectionalPart("耍头"), true);
+  equal(AssemblyRules.isDirectionalPart("栌斗"), false);
+  equal(AssemblyRules.isDirectionalPart("华拱"), false);
+});
+
+test("AssemblyRules.getKeyPoints: 返回9个关键点", function () {
+  const part = { id: "p1", type: "栌斗", x: 100, y: 100, layer: 1 };
+  const points = AssemblyRules.getKeyPoints(part);
+  equal(points.length, 9);
+  const types = points.map(p => p.type);
+  ok(types.includes("center"));
+  ok(types.includes("top-left"));
+  ok(types.includes("bottom-right"));
+  ok(types.includes("mid-top"));
+});
+
+test("AssemblyRules.checkSupportOverlap: 检测承托重叠", function () {
+  const lowerRect = { left: 100, right: 200, top: 200, bottom: 252, w: 100, h: 52 };
+  const upperRect = { left: 120, right: 180, top: 140, bottom: 180, w: 60, h: 40 };
+  const result = AssemblyRules.checkSupportOverlap(upperRect, lowerRect);
+  ok(result.overlapX > 0);
+  equal(result.gapY, 20);
+  equal(typeof result.isSupported, "boolean");
+});
+
+test("AssemblyRules.extractMentionedPartTypes: 提取连接点中提到的构件类型", function () {
+  deepEqual(AssemblyRules.extractMentionedPartTypes("下承栌斗"), ["栌斗"]);
+  deepEqual(AssemblyRules.extractMentionedPartTypes("上承华拱和散斗"), ["华拱", "散斗"]);
+  deepEqual(AssemblyRules.extractMentionedPartTypes("柱头连接"), []);
+  deepEqual(AssemblyRules.extractMentionedPartTypes(""), []);
+});
+
+// ============================================================
+// AssemblyChecker
+// ============================================================
+
+function makeSimpleScheme() {
+  return [
+    { id: "p1", type: "栌斗", x: 483, y: 620, layer: 1, dir: "正", connect: "柱头" },
+    { id: "p2", type: "华拱", x: 460, y: 564, layer: 2, dir: "正", connect: "下承栌斗" }
+  ];
+}
+
+test("AssemblyChecker.checkAll: 简单方案检查不报错", function () {
+  const scheme = makeSimpleScheme();
+  const result = AssemblyChecker.checkAll(scheme, AssemblyRules.VALID_TYPES || ["栌斗", "华拱", "昂", "耍头", "散斗"]);
+  ok(Array.isArray(result.issues));
+  equal(typeof result.errorCount, "number");
+  equal(typeof result.warningCount, "number");
+});
+
+test("AssemblyChecker.checkAll: 检测悬空构件", function () {
+  const scheme = [
+    { id: "p1", type: "华拱", x: 400, y: 300, layer: 5, dir: "正", connect: "" }
+  ];
+  const result = AssemblyChecker.checkAll(scheme, ["栌斗", "华拱", "昂", "耍头", "散斗"]);
+  const hasSuspension = result.issues.some(i => i.rule === "no_support_layer" || i.rule === "suspension");
+  ok(hasSuspension, "应检测到悬空或无承托问题");
+});
+
+test("AssemblyChecker.getIssuesForPart: 按构件筛选问题", function () {
+  const issues = [
+    { partId: "p1", rule: "test1" },
+    { partId: "p2", rule: "test2" },
+    { partId: "p3", relatedPartIds: ["p1"], rule: "test3" }
+  ];
+  const p1Issues = AssemblyChecker.getIssuesForPart(issues, "p1");
+  equal(p1Issues.length, 2);
+});
+
+test("AssemblyChecker.getTipsForPart: 获取问题提示", function () {
+  const issues = [
+    { partId: "p1", rule: "missing_connect", severity: "warning", message: "test" }
+  ];
+  const tips = AssemblyChecker.getTipsForPart(issues, "p1");
+  ok(tips.length > 0);
+  equal(tips[0].rule, "missing_connect");
+  ok(Array.isArray(tips[0].tips));
+});
+
+// ============================================================
+// AssemblyStepCalculator
+// ============================================================
+
+test("AssemblyStepCalculator.calculateSteps: 空方案返回空步骤", function () {
+  const result = AssemblyStepCalculator.calculateSteps([]);
+  equal(result.totalSteps, 0);
+  deepEqual(result.steps, []);
+  deepEqual(result.layers, []);
+  deepEqual(result.preinstalledPartIds, []);
+});
+
+test("AssemblyStepCalculator.calculateSteps: 多个构件生成对应步骤", function () {
+  const scheme = [
+    { id: "p1", type: "栌斗", x: 100, y: 200, layer: 1 },
+    { id: "p2", type: "华拱", x: 100, y: 150, layer: 2 },
+    { id: "p3", type: "散斗", x: 100, y: 100, layer: 3 }
+  ];
+  const result = AssemblyStepCalculator.calculateSteps(scheme);
+  equal(result.totalSteps, 3);
+  equal(result.steps.length, 3);
+  ok(result.steps[0].stepIndex === 0);
+});
+
+test("AssemblyStepCalculator.calculateSteps: 按层级排序", function () {
+  const scheme = [
+    { id: "p3", type: "散斗", x: 100, y: 100, layer: 3 },
+    { id: "p1", type: "栌斗", x: 100, y: 200, layer: 1 },
+    { id: "p2", type: "华拱", x: 100, y: 150, layer: 2 }
+  ];
+  const result = AssemblyStepCalculator.calculateSteps(scheme);
+  equal(result.steps[0].layer, 1);
+  equal(result.steps[result.steps.length - 1].layer, 3);
+});
+
+test("AssemblyStepCalculator.calculateSteps: startLayer 参数生效", function () {
+  const scheme = [
+    { id: "p1", type: "栌斗", x: 100, y: 200, layer: 1 },
+    { id: "p2", type: "华拱", x: 100, y: 150, layer: 2 },
+    { id: "p3", type: "散斗", x: 100, y: 100, layer: 3 }
+  ];
+  const result = AssemblyStepCalculator.calculateSteps(scheme, { startLayer: 2 });
+  equal(result.preinstalledPartIds.length, 1);
+  ok(result.preinstalledPartIds.includes("p1"));
+  ok(result.totalSteps < 3);
+});
+
+test("AssemblyStepCalculator.calculateSteps: targetLayer 参数生效", function () {
+  const scheme = [
+    { id: "p1", type: "栌斗", x: 100, y: 200, layer: 1 },
+    { id: "p2", type: "华拱", x: 100, y: 150, layer: 2 },
+    { id: "p3", type: "散斗", x: 100, y: 100, layer: 3 },
+    { id: "p4", type: "昂", x: 100, y: 50, layer: 4 }
+  ];
+  const result = AssemblyStepCalculator.calculateSteps(scheme, { targetLayer: 2 });
+  equal(result.steps.length, 2);
+  ok(result.steps.every(s => s.layer <= 2));
+});
+
+test("AssemblyStepCalculator.calculateSteps: 包含 allSteps 完整步骤", function () {
+  const scheme = [
+    { id: "p1", type: "栌斗", x: 100, y: 200, layer: 1 },
+    { id: "p2", type: "华拱", x: 100, y: 150, layer: 2 }
+  ];
+  const result = AssemblyStepCalculator.calculateSteps(scheme, { startLayer: 2 });
+  equal(result.allSteps.length, 2);
+  equal(typeof result.layerSteps, "object");
+});
+
+// ============================================================
+// MeasurementSerializer
+// ============================================================
+
+test("MeasurementSerializer.serialize: 序列化测量数据", function () {
+  const annotations = [
+    { id: "m1", from: { x: 10, y: 20 }, to: { x: 100, y: 200 } }
+  ];
+  const scale = { pixelsPerUnit: 40, unitName: "份" };
+  const result = MeasurementSerializer.serialize(annotations, scale);
+  equal(result.scale.pixelsPerUnit, 40);
+  equal(result.scale.unitName, "份");
+  equal(result.annotations.length, 1);
+  equal(result.annotations[0].id, "m1");
+  equal(result.annotations[0].from.x, 10);
+  equal(result.annotations[0].to.y, 200);
+});
+
+test("MeasurementSerializer.deserialize: 反序列化正常数据", function () {
+  const data = {
+    scale: { pixelsPerUnit: 50, unitName: "厘米" },
+    annotations: [
+      { id: "a1", from: { x: 0, y: 0 }, to: { x: 100, y: 100 } }
+    ]
+  };
+  const result = MeasurementSerializer.deserialize(data);
+  equal(result.scale.pixelsPerUnit, 50);
+  equal(result.scale.unitName, "厘米");
+  equal(result.annotations.length, 1);
+});
+
+test("MeasurementSerializer.deserialize: null 返回默认值", function () {
+  const result = MeasurementSerializer.deserialize(null);
+  equal(result.annotations.length, 0);
+  equal(result.scale.pixelsPerUnit, 40);
+  equal(result.scale.unitName, "份");
+});
+
+test("MeasurementSerializer.deserialize: 非法标注被过滤", function () {
+  const data = {
+    scale: null,
+    annotations: [
+      { id: "a1", from: { x: 0, y: 0 }, to: { x: 100, y: 100 } },
+      { id: "bad1", from: null, to: { x: 100, y: 100 } },
+      { id: "bad2", from: { x: 0, y: 0 }, to: "invalid" },
+      null
+    ]
+  };
+  const result = MeasurementSerializer.deserialize(data);
+  equal(result.annotations.length, 1);
+  equal(result.annotations[0].id, "a1");
+});
+
+test("MeasurementSerializer.deserialize: 坐标被取整", function () {
+  const data = {
+    annotations: [
+      { id: "a1", from: { x: 10.7, y: 20.2 }, to: { x: 30.1, y: 40.9 } }
+    ]
+  };
+  const result = MeasurementSerializer.deserialize(data);
+  equal(result.annotations[0].from.x, 11);
+  equal(result.annotations[0].from.y, 20);
+  equal(result.annotations[0].to.x, 30);
+  equal(result.annotations[0].to.y, 41);
+});
+
+test("MeasurementSerializer.deserialize: 缺少id时自动生成", function () {
+  const data = {
+    annotations: [
+      { from: { x: 0, y: 0 }, to: { x: 10, y: 10 } }
+    ]
+  };
+  const result = MeasurementSerializer.deserialize(data);
+  equal(result.annotations.length, 1);
+  ok(typeof result.annotations[0].id === "string");
+  ok(result.annotations[0].id.length > 0);
+});
+
+test("MeasurementSerializer.buildExportData: 构建导出数据", function () {
+  const scheme = [{ id: "p1", type: "栌斗" }];
+  const annotations = [{ id: "m1", from: { x: 0, y: 0 }, to: { x: 1, y: 1 } }];
+  const scale = { pixelsPerUnit: 40, unitName: "份" };
+  const result = MeasurementSerializer.buildExportData(scheme, annotations, scale);
+  ok(Array.isArray(result.scheme));
+  ok(result.measurement);
+  ok(result.measurement.annotations);
+});
+
+test("MeasurementSerializer.parseImportData: 解析导入数据", function () {
+  const data = {
+    scheme: [{ id: "p1", type: "栌斗" }],
+    measurement: {
+      scale: { pixelsPerUnit: 50, unitName: "份" },
+      annotations: []
+    }
+  };
+  const result = MeasurementSerializer.parseImportData(data);
+  ok(result !== null);
+  ok(Array.isArray(result.scheme));
+  ok(result.measurement);
+  equal(result.measurement.scale.pixelsPerUnit, 50);
+});
+
+test("MeasurementSerializer.parseImportData: null 返回null", function () {
+  const result = MeasurementSerializer.parseImportData(null);
+  equal(result, null);
+});
+
+// ============================================================
+// GeometryTransform
+// ============================================================
+
+test("GeometryTransform.mirrorCopy: 空选择返回空数组", function () {
+  const scheme = [{ id: "p1", type: "栌斗", x: 100, y: 100, layer: 1 }];
+  const result = GeometryTransform.mirrorCopy(scheme, new Set(), 200);
+  deepEqual(result, []);
+});
+
+test("GeometryTransform.mirrorCopy: 沿对称轴镜像", function () {
+  const scheme = [{ id: "p1", type: "栌斗", x: 100, y: 100, layer: 1, dir: "正", connect: "" }];
+  const axisX = 300;
+  const result = GeometryTransform.mirrorCopy(scheme, new Set(["p1"]), axisX);
+  equal(result.length, 1);
+  equal(result[0].type, "栌斗");
+  equal(result[0].layer, 1);
+  equal(result[0].y, 100);
+
+  const originalCenter = 100 + 74 / 2;
+  const mirroredCenter = 2 * axisX - originalCenter;
+  const expectedX = Math.round(mirroredCenter - 74 / 2);
+  equal(result[0].x, expectedX);
+});
+
+test("GeometryTransform.mirrorCopy: 未指定轴时使用组中心", function () {
+  const scheme = [{ id: "p1", type: "栌斗", x: 100, y: 100, layer: 1, dir: "正", connect: "" }];
+  const result = GeometryTransform.mirrorCopy(scheme, new Set(["p1"]));
+  equal(result.length, 1);
+  equal(typeof result[0].x, "number");
+});
+
+test("GeometryTransform.batchCopy: 批量复制", function () {
+  const scheme = [{ id: "p1", type: "栌斗", x: 100, y: 100, layer: 1, dir: "正", connect: "" }];
+  const result = GeometryTransform.batchCopy(scheme, new Set(["p1"]), 3, 50);
+  equal(result.length, 3);
+  equal(result[0].x, 150);
+  equal(result[1].x, 200);
+  equal(result[2].x, 250);
+  equal(result[0].y, 100);
+  equal(result[1].layer, 1);
+});
+
+test("GeometryTransform.batchCopy: count 至少为1", function () {
+  const scheme = [{ id: "p1", type: "栌斗", x: 100, y: 100, layer: 1, dir: "正", connect: "" }];
+  const result = GeometryTransform.batchCopy(scheme, new Set(["p1"]), 0, 50);
+  equal(result.length, 1);
+});
+
+test("GeometryTransform.batchCopy: 空选择返回空数组", function () {
+  const scheme = [{ id: "p1", type: "栌斗", x: 100, y: 100, layer: 1 }];
+  const result = GeometryTransform.batchCopy(scheme, new Set(), 3, 50);
+  deepEqual(result, []);
+});
+
+// ============================================================
+// AutoLayoutConstraintModel
+// ============================================================
+
+test("AutoLayoutConstraintModel.getPreferredTypes: 返回层级推荐类型", function () {
+  const layer1 = AutoLayoutConstraintModel.getPreferredTypes(1);
+  ok(Array.isArray(layer1));
+  ok(layer1.includes("栌斗"));
+
+  const layer2 = AutoLayoutConstraintModel.getPreferredTypes(2);
+  ok(Array.isArray(layer2));
+  ok(layer2.length > 0);
+});
+
+test("AutoLayoutConstraintModel.getPlacementMode: 返回放置模式", function () {
+  const mode1 = AutoLayoutConstraintModel.getPlacementMode("栌斗", "华拱");
+  equal(typeof mode1, "string");
+  ok(mode1.length > 0);
+
+  const mode2 = AutoLayoutConstraintModel.getPlacementMode("华拱", "散斗");
+  equal(typeof mode2, "string");
+});
+
+test("AutoLayoutConstraintModel.calcY: 计算上层构件Y坐标", function () {
+  const supporterY = 200;
+  const supporterH = 52;
+  const newH = 34;
+  const y = AutoLayoutConstraintModel.calcY(supporterY, supporterH, newH);
+  equal(typeof y, "number");
+  ok(y < supporterY);
+});
+
+test("AutoLayoutConstraintModel.getSymmetryAxis: 返回对称轴", function () {
+  const axis = AutoLayoutConstraintModel.getSymmetryAxis();
+  equal(typeof axis, "number");
+  ok(axis > 0);
+});
+
+test("AutoLayoutConstraintModel.calcYForLayer: 按层计算Y坐标", function () {
+  const baseY = 600;
+  const y1 = AutoLayoutConstraintModel.calcYForLayer(baseY, 1);
+  const y3 = AutoLayoutConstraintModel.calcYForLayer(baseY, 3);
+  equal(y1, baseY);
+  ok(y3 < baseY);
+});
+
+// ============================================================
+// AutoLayoutConflictDetector
+// ============================================================
+
+test("AutoLayoutConflictDetector.detectAll: 返回检测结果", function () {
+  const scheme = [
+    { id: "p1", type: "栌斗", x: 483, y: 620, layer: 1, dir: "正", connect: "柱头" }
+  ];
+  const result = AutoLayoutConflictDetector.detectAll(scheme, ["栌斗", "华拱", "昂", "耍头", "散斗"]);
+  ok(Array.isArray(result.issues));
+  equal(typeof result.errorCount, "number");
+  equal(typeof result.warningCount, "number");
+  equal(typeof result.totalCount, "number");
+});
+
+test("AutoLayoutConflictDetector.detectAll: 对称模式检查对称问题", function () {
+  const scheme = [
+    { id: "p1", type: "栌斗", x: 400, y: 600, layer: 1, dir: "正", connect: "" }
+  ];
+  const result = AutoLayoutConflictDetector.detectAll(
+    scheme,
+    ["栌斗", "华拱", "昂", "耍头", "散斗"],
+    { symmetric: true }
+  );
+  ok(Array.isArray(result.issues));
+  ok(result.extraIssues >= 0);
+});
+
+test("AutoLayoutConflictDetector.detectAll: 问题按严重程度排序", function () {
+  const scheme = [
+    { id: "p1", type: "华拱", x: 400, y: 300, layer: 5, dir: "正", connect: "" }
+  ];
+  const result = AutoLayoutConflictDetector.detectAll(scheme, ["栌斗", "华拱", "昂", "耍头", "散斗"]);
+  if (result.issues.length >= 2) {
+    const sevOrder = { error: 0, warning: 1, info: 2 };
+    for (let i = 1; i < result.issues.length; i++) {
+      const prev = sevOrder[result.issues[i - 1].severity] ?? 3;
+      const curr = sevOrder[result.issues[i].severity] ?? 3;
+      ok(prev <= curr, "问题应按严重程度从高到低排序");
+    }
+  }
+});
+
+// ============================================================
 // Run
 // ============================================================
 
@@ -616,6 +1105,13 @@ function runGroup(title, prefix) {
 runGroup("ImportParser 测试", "ImportParser");
 runGroup("ImportValidator 测试", "ImportValidator");
 runGroup("SchemeDiff 测试", "SchemeDiff");
+runGroup("AssemblyRules 测试", "AssemblyRules");
+runGroup("AssemblyChecker 测试", "AssemblyChecker");
+runGroup("AssemblyStepCalculator 测试", "AssemblyStepCalculator");
+runGroup("MeasurementSerializer 测试", "MeasurementSerializer");
+runGroup("GeometryTransform 测试", "GeometryTransform");
+runGroup("AutoLayoutConstraintModel 测试", "AutoLayoutConstraintModel");
+runGroup("AutoLayoutConflictDetector 测试", "AutoLayoutConflictDetector");
 
 const totalPassed = passed;
 const totalFailed = failed;

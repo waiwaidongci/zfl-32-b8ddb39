@@ -1,0 +1,18 @@
+{
+  "name": "dougong-assembly-simulator",
+  "version": "1.0.0",
+  "description": "古建筑斗拱拆解排布模拟",
+  "private": true,
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "dev": "node scripts/serve.js",
+    "test": "node test/core.test.js",
+    "test:watch": "node scripts/watch-test.js",
+    "smoke": "node scripts/smoke-check.js",
+    "lint": "node scripts/lint.js",
+    "verify": "npm run smoke && npm run test"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
