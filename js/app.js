@@ -32,9 +32,6 @@ const App = {
   _autoLayoutManualEdits: false,
   _repairPreviewState: null,
   _showGhostOriginals: true,
-  _diffMode: false,
-  _diffResult: null,
-  diffPanel: null,
 
   _getSelectedSet() {
     return new Set(SelectionManager.getIds());
@@ -61,7 +58,7 @@ const App = {
     this.schemeVersionPanel = document.querySelector("#schemeVersionPanel");
     this.viewToggleBtn = document.querySelector("#viewToggleBtn");
     this.canvas3DWrap = document.querySelector("#canvas3DWrap");
-    this.diffPanel = document.querySelector("#diffPanel");
+
 
     this._initPreview3D();
 
@@ -71,7 +68,8 @@ const App = {
     this.initBatch();
     this.initMeasurement();
     this.initAutoLayout();
-    this.initDiffMode();
+    this._initStateSnapshotManager();
+    this._initDiffModeManager();
     this.bindEvents();
     this.initPlayer();
     this.initSchemeVersion();
@@ -137,175 +135,49 @@ const App = {
     return SchemeState.hasUnsavedChanges(this.scheme, measurementData);
   },
 
-  initDiffMode() {
+  _initStateSnapshotManager() {
     var self = this;
-    SchemeDiffUI.init("#diffPanel", {
-      onDiffModeChanged: function(active, diffResult, restoredSnapshot) {
+    StateSnapshotManager.init({
+      getScheme: function() { return self.scheme; },
+      setScheme: function(scheme) { self.scheme = scheme; },
+      getMeasurementData: function() { return self._getCurrentMeasurementData(); },
+      applyMeasurementData: function(data) { self._applyMeasurementData(data); },
+      getMeasurementScale: function() { return MeasurementState.getScale(); },
+      isExploded: function() { return self.canvas.classList.contains("exploded"); },
+      setExploded: function(active) {
         if (active) {
-          self._diffMode = true;
-          self._diffResult = diffResult;
-          Preview3D.setDiffMode(true, diffResult);
-          document.body.classList.add("diff-mode-active");
+          self.canvas.classList.add("exploded");
         } else {
-          self._diffMode = false;
-          self._diffResult = null;
-          Preview3D.setDiffMode(false, null);
-          document.body.classList.remove("diff-mode-active");
-          if (restoredSnapshot) {
-            self._restoreStateFromSnapshot(restoredSnapshot);
-          }
+          self.canvas.classList.remove("exploded");
         }
-        self.renderAll();
       },
-      onDiffItemSelect: function(partId, diffType) {
-        self._onDiffItemSelect(partId, diffType);
+      getZoomValue: function() { return self.zoomInput ? self.zoomInput.value : null; },
+      setZoomValue: function(value) {
+        if (self.zoomInput && value !== null) {
+          self.zoomInput.value = value;
+          self.canvas.style.transform = "scale(" + (Number(value) / 100) + ")";
+        }
       },
-      onDiffMeasurementSelect: function(annotationId, diffType) {
-        self._onDiffMeasurementSelect(annotationId, diffType);
-      }
+      refreshPlayerSteps: function() { self.refreshPlayerSteps(); }
     });
   },
 
-  _createStateSnapshot() {
-    var scale = MeasurementState.getScale();
-    return {
-      scheme: this.scheme.map(function(p) { return Object.assign({}, p); }),
-      selectedIds: SelectionManager.getIds().slice(),
-      measurement: this._getCurrentMeasurementData(),
-      measurementState: {
-        isActive: MeasurementState.isActive,
-        selectedAnnotationId: MeasurementState.selectedAnnotationId,
-        pendingPoint: MeasurementState.pendingPoint ? Object.assign({}, MeasurementState.pendingPoint) : null,
-        hoverPoint: MeasurementState.hoverPoint ? Object.assign({}, MeasurementState.hoverPoint) : null,
-        snapPoint: MeasurementState.snapPoint ? Object.assign({}, MeasurementState.snapPoint) : null
-      },
-      explodeActive: this.canvas.classList.contains("exploded"),
-      zoomValue: this.zoomInput ? this.zoomInput.value : null
-    };
-  },
-
-  _restoreStateFromSnapshot(snapshot) {
-    if (!snapshot) return;
-    if (snapshot.scheme) {
-      this.scheme = snapshot.scheme.map(function(p) { return Object.assign({}, p); });
-    }
-    if (snapshot.selectedIds) {
-      SelectionManager.setSelection(snapshot.selectedIds);
-    }
-    if (snapshot.measurement) {
-      this._applyMeasurementData(snapshot.measurement);
-    }
-    if (snapshot.measurementState && typeof snapshot.measurementState === "object") {
-      var ms = snapshot.measurementState;
-      MeasurementState.isActive = !!ms.isActive;
-      MeasurementState.selectedAnnotationId = (typeof ms.selectedAnnotationId === "string") ? ms.selectedAnnotationId : null;
-      MeasurementState.pendingPoint = ms.pendingPoint ? Object.assign({}, ms.pendingPoint) : null;
-      MeasurementState.hoverPoint = ms.hoverPoint ? Object.assign({}, ms.hoverPoint) : null;
-      MeasurementState.snapPoint = ms.snapPoint ? Object.assign({}, ms.snapPoint) : null;
-      if (typeof MeasurementState._notify === "function") {
-        MeasurementState._notify();
-      }
-    }
-    if (snapshot.explodeActive !== undefined) {
-      if (snapshot.explodeActive) {
-        this.canvas.classList.add("exploded");
-      } else {
-        this.canvas.classList.remove("exploded");
-      }
-      Preview3D.setExploded(!!snapshot.explodeActive);
-    }
-    if (snapshot.zoomValue !== null && this.zoomInput) {
-      this.zoomInput.value = snapshot.zoomValue;
-      this.canvas.style.transform = "scale(" + (Number(snapshot.zoomValue) / 100) + ")";
-    }
-    this.refreshPlayerSteps();
+  _initDiffModeManager() {
+    var self = this;
+    DiffModeManager.init("#diffPanel", {
+      getScheme: function() { return self.scheme; },
+      getCanvas: function() { return self.canvas; },
+      getMeasurementData: function() { return self._getCurrentMeasurementData(); },
+      renderAll: function() { self.renderAll(); }
+    });
   },
 
   enterDiffMode(savedSchemeId) {
-    if (this._diffMode) {
-      this.exitDiffMode();
-    }
-    var snapshot = this._createStateSnapshot();
-    SchemeDiffUI.saveStateSnapshot(snapshot);
-    var measurementData = this._getCurrentMeasurementData();
-    SchemeDiffUI.enterDiffMode(this.scheme, savedSchemeId, measurementData);
+    DiffModeManager.enterDiffMode(savedSchemeId);
   },
 
   exitDiffMode() {
-    SchemeDiffUI.exitDiffMode();
-  },
-
-  _onDiffItemSelect(partId, diffType) {
-    if (diffType === "deleted") {
-      var diffItem = this._diffResult ? this._diffResult.deleted.find(function(d) { return d.partId === partId; }) : null;
-      if (diffItem && diffItem.part) {
-        var ghostEl = this.canvas.querySelector('.diff-deleted-ghost[data-ghost-id="' + partId + '"]');
-        if (ghostEl) {
-          ghostEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-          ghostEl.style.outline = "5px solid rgba(198, 40, 40, 1)";
-          var savedOutline = ghostEl.style.outline;
-          setTimeout(function() {
-            ghostEl.style.outline = "";
-          }, 2500);
-        }
-        if (Preview3D.isActive()) {
-          Preview3D.focusOnPartIds([partId + "_ghost_deleted"]);
-        }
-      }
-      return;
-    }
-
-    if (diffType === "moved") {
-      var moveGhostEl = this.canvas.querySelector('.diff-move-ghost');
-      var targetGhost = null;
-      if (this._diffResult) {
-        var movedItem = this._diffResult.moved.find(function(d) { return d.partId === partId; });
-        if (movedItem && movedItem.from) {
-          var allGhosts = this.canvas.querySelectorAll('.diff-move-ghost');
-          for (var gi = 0; gi < allGhosts.length; gi++) {
-            var gx = parseInt(allGhosts[gi].style.left) || 0;
-            var gy = parseInt(allGhosts[gi].style.top) || 0;
-            if (Math.abs(gx - movedItem.from.x) < 5 && Math.abs(gy - movedItem.from.y) < 5) {
-              targetGhost = allGhosts[gi];
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    var part = this.scheme.find(function(p) { return p.id === partId; });
-    if (!part) return;
-
-    SelectionManager.select(partId);
-
-    var el = this.canvas.querySelector('.part[data-id="' + partId + '"]');
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-    }
-
-    if (Preview3D.isActive()) {
-      Preview3D.focusOnPartIds([partId]);
-    }
-
-    this.renderAll();
-  },
-
-  _onDiffMeasurementSelect(annotationId, diffType) {
-    var annEl = this.canvas.querySelector('.annotation-group[data-annotation-id="' + annotationId + '"]');
-    if (annEl) {
-      annEl.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-      annEl.style.filter = "drop-shadow(0 0 8px rgba(255, 193, 7, 0.9))";
-      setTimeout(function() {
-        annEl.style.filter = "";
-      }, 2500);
-    }
-    if (diffType === "measDeleted" && this._diffResult && this._diffResult.measurementDiff) {
-      var delItem = this._diffResult.measurementDiff.deleted.find(function(d) { return d.annotationId === annotationId; });
-      if (delItem && delItem.annotation) {
-        alert("已删除的标注信息：\n" + SchemeDiff.formatMeasurementLabel(delItem.annotation));
-      }
-    }
+    DiffModeManager.exitDiffMode();
   },
 
   initSchemeVersion() {
@@ -693,7 +565,7 @@ const App = {
   },
 
   _isDiffEditingLocked() {
-    if (this._diffMode) {
+    if (DiffModeManager.isActive()) {
       alert("差异对比模式下为只读模式，无法进行编辑操作。\n请先点击「退出对比」按钮后再进行编辑。");
       return true;
     }
@@ -727,7 +599,7 @@ const App = {
       }
 
       if (!this.drag || AssemblyPlayerState.isActive) return;
-      if (this._diffMode) return;
+      if (DiffModeManager.isActive()) return;
       var item = this.scheme.find(function(p) { return p.id === this.drag.id; }.bind(this));
       if (!item) return;
       item.x = Math.round((event.clientX - rect.left) / zoom - this.drag.ox);
@@ -806,7 +678,7 @@ const App = {
       Preview3D.setExploded(isExploded);
     }.bind(this);
     this.saveBtn.onclick = function() {
-      if (this._diffMode) {
+      if (DiffModeManager.isActive()) {
         alert("差异对比模式下无法保存，请先退出对比模式。");
         return;
       }
@@ -827,7 +699,7 @@ const App = {
       }
     }.bind(this);
     this.exportBtn.onclick = function() {
-      if (this._diffMode) {
+      if (DiffModeManager.isActive()) {
         alert("差异对比模式下无法导出，请先退出对比模式。");
         return;
       }
@@ -838,7 +710,7 @@ const App = {
       this.importFileInput.click();
     }.bind(this);
     this.importFileInput.onchange = function() {
-      if (this._diffMode) return;
+      if (DiffModeManager.isActive()) return;
       ImportUI.open(this.importFileInput, this.parts, function(data) { this.applyImportedScheme(data); }.bind(this));
     }.bind(this);
 
@@ -863,12 +735,12 @@ const App = {
     }.bind(this);
 
     window.onkeydown = function(event) {
-      if (event.key === "Escape" && this._diffMode) {
+      if (event.key === "Escape" && DiffModeManager.isActive()) {
         this.exitDiffMode();
         event.preventDefault();
         return;
       }
-      if (this._diffMode && (event.key === "Delete" || event.key === "Backspace")) {
+      if (DiffModeManager.isActive() && (event.key === "Delete" || event.key === "Backspace")) {
         event.preventDefault();
         return;
       }
@@ -939,13 +811,13 @@ const App = {
     if (!opts.editorOnly && !opts.treeAndChecksOnly) {
       var renderOptsWithPreview = Object.assign({}, renderOpts, {
         previewState: this._repairPreviewState,
-        diffResult: this._diffResult
+        diffResult: DiffModeManager.getDiffResult()
       });
       Renderer.render(this.canvas, this.scheme, selectedSet, this.errorPartIds, function(id, ox, oy, shiftKey) {
         if (AssemblyPlayerState.isActive) return;
         if (MeasurementState.isActive) return;
         if (this._repairPreviewState && this._repairPreviewState.isPreviewing) return;
-        if (this._diffMode) {
+        if (DiffModeManager.isActive()) {
           if (shiftKey) {
             SelectionManager.toggle(id);
           } else {
@@ -968,7 +840,7 @@ const App = {
       this.canvas.querySelectorAll(".annotation-group").forEach(function(el) {
         el.onclick = function(event) {
           event.stopPropagation();
-          if (this._diffMode) return;
+          if (DiffModeManager.isActive()) return;
           MeasurementState.selectAnnotation(el.dataset.annotationId);
         }.bind(this);
       }.bind(this));
@@ -977,17 +849,17 @@ const App = {
     if (!isAssemblyMode) {
       var editorOpts = {
         checkIssues: checkResult ? checkResult.issues : [],
-        readOnly: this._diffMode
+        readOnly: DiffModeManager.isActive()
       };
       ComponentEditor.renderEditor(this.editor, this.scheme, selectedSet,
         function(editorOptsInner) {
-          if (this._diffMode) return;
+          if (DiffModeManager.isActive()) return;
           this._markAutoLayoutManualEdit();
           this.refreshPlayerSteps();
           this.renderAll(editorOptsInner || {});
         }.bind(this),
         function(id) {
-          if (this._diffMode) return;
+          if (DiffModeManager.isActive()) return;
           AutoLayoutPanel.recordCurrentScheme(this.scheme);
           this.scheme = this.scheme.filter(function(x) { return x.id !== id; });
           SelectionManager.removeFromSelection(id);
@@ -1011,17 +883,17 @@ const App = {
 
     AnnotationRenderer.renderMeasurementPanel(
       this.measurementPanel,
-      Object.assign({}, measureState, { readOnly: this._diffMode }),
+      Object.assign({}, measureState, { readOnly: DiffModeManager.isActive() }),
       function(id) {
-        if (this._diffMode) return;
+        if (DiffModeManager.isActive()) return;
         MeasurementState.removeAnnotation(id);
       }.bind(this),
       function(id) {
-        if (this._diffMode) return;
+        if (DiffModeManager.isActive()) return;
         MeasurementState.selectAnnotation(id);
       }.bind(this),
       function(px, unit) {
-        if (this._diffMode) return;
+        if (DiffModeManager.isActive()) return;
         MeasurementState.setScale(px, unit);
       }.bind(this)
     );
