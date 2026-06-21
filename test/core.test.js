@@ -1046,6 +1046,72 @@ test("AutoLayoutConstraintModel.calcYForLayer: 按层计算Y坐标", function ()
 });
 
 // ============================================================
+// AutoLayoutEngine
+// ============================================================
+
+function makeMisalignedAutoLayoutScheme() {
+  return [
+    { id: "base", type: "栌斗", x: 483, y: 620, layer: 1, dir: "正", connect: "柱头" },
+    { id: "upper", type: "华拱", x: 460, y: 500, layer: 2, dir: "正", connect: "" }
+  ];
+}
+
+test("AutoLayoutEngine.generateScheme: 生成多层方案并补齐连接点", function () {
+  const scheme = AutoLayoutEngine.generateScheme({
+    targetLayers: 3,
+    partsPerLayer: 2,
+    symmetric: false,
+    baseConnect: "柱头"
+  });
+
+  ok(Array.isArray(scheme));
+  ok(scheme.length >= 3, "应至少生成基础层和上层构件");
+  equal(scheme[0].type, "栌斗");
+  equal(scheme[0].layer, 1);
+  equal(scheme[0].connect, "柱头");
+  ok(scheme.some(p => p.layer === 2), "应生成第2层构件");
+  ok(scheme.some(p => p.layer === 3), "应生成第3层构件");
+  ok(scheme.every(p => typeof p.id === "string" && p.id.length > 0), "每个构件都应有id");
+  ok(scheme.every(p => !Object.keys(p).some(k => k.startsWith("_"))), "导出的方案不应包含临时评分字段");
+});
+
+test("AutoLayoutEngine.previewRepairPlan: 生成位置与连接点修复预览", function () {
+  const scheme = makeMisalignedAutoLayoutScheme();
+  const plan = AutoLayoutEngine.previewRepairPlan(scheme, { symmetric: false });
+  const repairedUpper = plan.previewScheme.find(p => p.id === "upper");
+
+  ok(plan.hasChanges);
+  equal(plan.originalScheme[1].y, 500);
+  equal(scheme[1].y, 500, "预览不应修改原始方案");
+  equal(repairedUpper.y, 564);
+  equal(repairedUpper.connect, "下承栌斗");
+  ok(plan.actions.some(a => a.type === "position_adjust" && a.partId === "upper"));
+  ok(plan.actions.some(a => a.type === "connect_update" && a.partId === "upper"));
+  equal(plan.stats.positionAdjustCount, 1);
+  equal(plan.stats.connectUpdateCount, 1);
+  ok(plan.affectedPartIds.includes("upper"));
+});
+
+test("AutoLayoutEngine.applyRepairPlan: 应用预览并返回方案副本", function () {
+  const plan = AutoLayoutEngine.previewRepairPlan(makeMisalignedAutoLayoutScheme(), { symmetric: false });
+  const applied = AutoLayoutEngine.applyRepairPlan(plan);
+
+  deepEqual(applied, plan.previewScheme);
+  ok(applied !== plan.previewScheme, "返回数组应是副本");
+  ok(applied[0] !== plan.previewScheme[0], "返回构件对象应是副本");
+});
+
+test("AutoLayoutEngine.repairScheme: 直接返回修复后的方案", function () {
+  const scheme = makeMisalignedAutoLayoutScheme();
+  const repaired = AutoLayoutEngine.repairScheme(scheme, { symmetric: false });
+  const upper = repaired.find(p => p.id === "upper");
+
+  equal(scheme[1].y, 500, "修复不应修改输入方案");
+  equal(upper.y, 564);
+  equal(upper.connect, "下承栌斗");
+});
+
+// ============================================================
 // AutoLayoutConflictDetector
 // ============================================================
 
@@ -1111,6 +1177,7 @@ runGroup("AssemblyStepCalculator 测试", "AssemblyStepCalculator");
 runGroup("MeasurementSerializer 测试", "MeasurementSerializer");
 runGroup("GeometryTransform 测试", "GeometryTransform");
 runGroup("AutoLayoutConstraintModel 测试", "AutoLayoutConstraintModel");
+runGroup("AutoLayoutEngine 测试", "AutoLayoutEngine");
 runGroup("AutoLayoutConflictDetector 测试", "AutoLayoutConflictDetector");
 
 const totalPassed = passed;
