@@ -403,10 +403,15 @@ const App = {
       var zoom = Number(this.zoomInput.value) / 100;
       var rect = this.canvas.getBoundingClientRect();
 
-      if (MeasurementState.isActive && MeasurementState.pendingPoint && !AssemblyPlayerState.isActive) {
+      if (MeasurementState.isActive && !AssemblyPlayerState.isActive) {
         var hoverX = Math.round((event.clientX - rect.left) / zoom);
         var hoverY = Math.round((event.clientY - rect.top) / zoom);
-        MeasurementState.setHoverPoint(hoverX, hoverY);
+        var snapInfo = AssemblyRules.findNearestSnapPoint(hoverX, hoverY, this.scheme);
+        if (snapInfo) {
+          MeasurementState.setHoverPoint(snapInfo.x, snapInfo.y, snapInfo);
+        } else {
+          MeasurementState.setHoverPoint(hoverX, hoverY, null);
+        }
       }
 
       if (!this.drag || AssemblyPlayerState.isActive) return;
@@ -434,20 +439,49 @@ const App = {
       var canvasX = Math.round((event.clientX - rect.left) / zoom);
       var canvasY = Math.round((event.clientY - rect.top) / zoom);
 
-      var partEl = event.target.closest(".part");
-      if (partEl) {
-        var partId = partEl.dataset.id;
-        var part = this.scheme.find(function(p) { return p.id === partId; });
-        if (part) {
-          canvasX = part.x + Math.round(partEl.offsetWidth / 2);
-          canvasY = part.y + Math.round(partEl.offsetHeight / 2);
+      var snapInfo = AssemblyRules.findNearestSnapPoint(canvasX, canvasY, this.scheme);
+      var usedSnap = null;
+      var finalX = canvasX;
+      var finalY = canvasY;
+
+      if (snapInfo) {
+        finalX = snapInfo.x;
+        finalY = snapInfo.y;
+        usedSnap = snapInfo;
+      } else {
+        var partEl = event.target.closest(".part");
+        if (partEl) {
+          var partId = partEl.dataset.id;
+          var part = this.scheme.find(function(p) { return p.id === partId; });
+          if (part) {
+            var size = AssemblyRules.getSize(part.type);
+            var centerX = part.x + Math.round(size.w / 2);
+            var centerY = part.y + Math.round(size.h / 2);
+            finalX = centerX;
+            finalY = centerY;
+            usedSnap = {
+              x: centerX,
+              y: centerY,
+              type: "center",
+              partId: part.id,
+              partType: part.type,
+              label: AssemblyRules.SNAP_POINT_LABELS["center"]
+            };
+          }
         }
       }
 
       if (!MeasurementState.pendingPoint) {
-        MeasurementState.setPendingPoint(canvasX, canvasY);
+        MeasurementState.setPendingPoint(finalX, finalY, usedSnap);
       } else {
-        MeasurementState.addAnnotation(MeasurementState.pendingPoint, { x: canvasX, y: canvasY });
+        var secondPoint = { x: finalX, y: finalY };
+        if (usedSnap) {
+          secondPoint.snapType = usedSnap.type;
+          secondPoint.partId = usedSnap.partId;
+          secondPoint.partType = usedSnap.partType;
+          secondPoint.snapLabel = usedSnap.label;
+        }
+        MeasurementState.addAnnotation(MeasurementState.pendingPoint, secondPoint);
       }
     }.bind(this);
 

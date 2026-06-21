@@ -57,6 +57,63 @@ const AssemblyRules = {
     };
   },
 
+  SNAP_POINT_LABELS: {
+    "center": "中心",
+    "top-left": "左上",
+    "top-right": "右上",
+    "bottom-left": "左下",
+    "bottom-right": "右下",
+    "mid-top": "上边中点",
+    "mid-bottom": "下边中点",
+    "mid-left": "左边中点",
+    "mid-right": "右边中点"
+  },
+
+  getKeyPoints(part) {
+    const r = this.getRect(part);
+    return [
+      { type: "center", x: Math.round(r.left + r.w / 2), y: Math.round(r.top + r.h / 2) },
+      { type: "top-left", x: r.left, y: r.top },
+      { type: "top-right", x: r.right, y: r.top },
+      { type: "bottom-left", x: r.left, y: r.bottom },
+      { type: "bottom-right", x: r.right, y: r.bottom },
+      { type: "mid-top", x: Math.round(r.left + r.w / 2), y: r.top },
+      { type: "mid-bottom", x: Math.round(r.left + r.w / 2), y: r.bottom },
+      { type: "mid-left", x: r.left, y: Math.round(r.top + r.h / 2) },
+      { type: "mid-right", x: r.right, y: Math.round(r.top + r.h / 2) }
+    ];
+  },
+
+  findNearestSnapPoint(canvasX, canvasY, scheme, threshold) {
+    const SNAP_THRESHOLD = threshold !== undefined ? threshold : 12;
+    let nearest = null;
+    let minDist = SNAP_THRESHOLD;
+
+    for (let i = 0; i < scheme.length; i++) {
+      const part = scheme[i];
+      const points = this.getKeyPoints(part);
+      for (let j = 0; j < points.length; j++) {
+        const p = points[j];
+        const dx = p.x - canvasX;
+        const dy = p.y - canvasY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < minDist) {
+          minDist = dist;
+          nearest = {
+            x: p.x,
+            y: p.y,
+            type: p.type,
+            partId: part.id,
+            partType: part.type,
+            label: this.SNAP_POINT_LABELS[p.type]
+          };
+        }
+      }
+    }
+
+    return nearest;
+  },
+
   canSupport(lowerType, upperType) {
     const allowed = this.SUPPORT_RULES[lowerType];
     if (!allowed) return false;

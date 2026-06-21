@@ -23,6 +23,10 @@ var AnnotationRenderer = {
       this._renderAnnotation(svg, annotations[i], state);
     }
 
+    if (state.snapPoint) {
+      this._renderSnapMarker(svg, state.snapPoint);
+    }
+
     if (state.pendingPoint && state.hoverPoint) {
       this._renderPreviewLine(svg, state.pendingPoint, state.hoverPoint, state.scale);
     }
@@ -171,6 +175,68 @@ var AnnotationRenderer = {
     }
   },
 
+  _renderSnapMarker(svg, snapPoint) {
+    var crossSize = 6;
+    var cross = document.createElementNS(this.SVG_NS, "g");
+    cross.setAttribute("class", "annotation-snap-marker");
+
+    var line1 = document.createElementNS(this.SVG_NS, "line");
+    line1.setAttribute("x1", snapPoint.x - crossSize);
+    line1.setAttribute("y1", snapPoint.y);
+    line1.setAttribute("x2", snapPoint.x + crossSize);
+    line1.setAttribute("y2", snapPoint.y);
+    line1.setAttribute("class", "annotation-snap-cross");
+    cross.appendChild(line1);
+
+    var line2 = document.createElementNS(this.SVG_NS, "line");
+    line2.setAttribute("x1", snapPoint.x);
+    line2.setAttribute("y1", snapPoint.y - crossSize);
+    line2.setAttribute("x2", snapPoint.x);
+    line2.setAttribute("y2", snapPoint.y + crossSize);
+    line2.setAttribute("class", "annotation-snap-cross");
+    cross.appendChild(line2);
+
+    var circle = document.createElementNS(this.SVG_NS, "circle");
+    circle.setAttribute("cx", snapPoint.x);
+    circle.setAttribute("cy", snapPoint.y);
+    circle.setAttribute("r", "4");
+    circle.setAttribute("class", "annotation-snap-dot");
+    cross.appendChild(circle);
+
+    svg.appendChild(cross);
+
+    if (snapPoint.label) {
+      var labelText = snapPoint.label;
+      if (snapPoint.partType) {
+        labelText = snapPoint.partType + " · " + labelText;
+      }
+
+      var labelBg = document.createElementNS(this.SVG_NS, "rect");
+      labelBg.setAttribute("class", "annotation-snap-label-bg");
+      svg.appendChild(labelBg);
+
+      var label = document.createElementNS(this.SVG_NS, "text");
+      label.setAttribute("x", snapPoint.x);
+      label.setAttribute("y", snapPoint.y - 16);
+      label.setAttribute("class", "annotation-snap-label");
+      label.setAttribute("text-anchor", "middle");
+      label.setAttribute("dominant-baseline", "middle");
+      label.textContent = labelText;
+      svg.appendChild(label);
+
+      var bbox = null;
+      try { bbox = label.getBBox(); } catch (e) { bbox = null; }
+      if (bbox) {
+        var pad = 4;
+        labelBg.setAttribute("x", snapPoint.x - bbox.width / 2 - pad);
+        labelBg.setAttribute("y", snapPoint.y - 16 - bbox.height / 2 - pad);
+        labelBg.setAttribute("width", bbox.width + pad * 2);
+        labelBg.setAttribute("height", bbox.height + pad * 2);
+        labelBg.setAttribute("rx", "4");
+      }
+    }
+  },
+
   _renderPendingMarker(svg, point) {
     var circle = document.createElementNS(this.SVG_NS, "circle");
     circle.setAttribute("cx", point.x);
@@ -197,9 +263,24 @@ var AnnotationRenderer = {
     html += '<span class="measurement-mode-indicator ' + (state.isActive ? "active" : "") + '">' +
       (state.isActive ? "● 测量模式已开启" : "○ 测量模式已关闭") + '</span>';
     if (state.isActive && state.pendingPoint) {
-      html += '<div class="measurement-hint">已选起点 (' + state.pendingPoint.x + ', ' + state.pendingPoint.y + ')，请点击第二个点</div>';
+      var startInfo = '(' + state.pendingPoint.x + ', ' + state.pendingPoint.y + ')';
+      if (state.pendingPoint.snapLabel) {
+        if (state.pendingPoint.partType) {
+          startInfo = state.pendingPoint.partType + ' · ' + state.pendingPoint.snapLabel;
+        } else {
+          startInfo = state.pendingPoint.snapLabel;
+        }
+      }
+      html += '<div class="measurement-hint">已选起点 ' + startInfo + '，请点击第二个点</div>';
     } else if (state.isActive) {
-      html += '<div class="measurement-hint">点击画布或构件设置标注起点</div>';
+      html += '<div class="measurement-hint">点击画布或构件设置标注起点（靠近构件关键点会自动吸附）</div>';
+    }
+    if (state.isActive && state.snapPoint) {
+      var snapInfo = state.snapPoint.label || (state.snapPoint.type || "");
+      if (state.snapPoint.partType) {
+        snapInfo = state.snapPoint.partType + ' · ' + snapInfo;
+      }
+      html += '<div class="measurement-snap-hint">已吸附：' + snapInfo + '</div>';
     }
     html += '</div>';
 
@@ -221,8 +302,25 @@ var AnnotationRenderer = {
         var ann = annotations[i];
         var isSelected = state.selectedAnnotationId === ann.id;
         var distText = MeasurementState.formatDistance(ann);
+        var fromInfo = "";
+        var toInfo = "";
+        if (ann.from && ann.from.snapLabel) {
+          fromInfo = ann.from.partType ? (ann.from.partType + "·") : "";
+          fromInfo += ann.from.snapLabel;
+        }
+        if (ann.to && ann.to.snapLabel) {
+          toInfo = ann.to.partType ? (ann.to.partType + "·") : "";
+          toInfo += ann.to.snapLabel;
+        }
+        var snapInfo = "";
+        if (fromInfo || toInfo) {
+          snapInfo = '<div class="ann-snap-info">' + (fromInfo || "自由点") + ' → ' + (toInfo || "自由点") + '</div>';
+        }
         html += '<div class="annotation-item' + (isSelected ? " selected" : "") + '" data-ann-id="' + ann.id + '">';
+        html += '<div class="ann-info">';
         html += '<span class="ann-dist">' + distText + '</span>';
+        html += snapInfo;
+        html += '</div>';
         html += '<button class="ann-delete" data-ann-delete="' + ann.id + '" title="删除此标注">×</button>';
         html += '</div>';
       }

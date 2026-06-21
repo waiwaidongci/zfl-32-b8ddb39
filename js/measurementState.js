@@ -5,6 +5,7 @@ const MeasurementState = {
   pendingPoint: null,
   hoverPoint: null,
   selectedAnnotationId: null,
+  snapPoint: null,
   _listeners: [],
 
   init(annotations, scale) {
@@ -15,6 +16,7 @@ const MeasurementState = {
     this.pendingPoint = null;
     this.hoverPoint = null;
     this.selectedAnnotationId = null;
+    this.snapPoint = null;
     this.isActive = false;
   },
 
@@ -24,6 +26,7 @@ const MeasurementState = {
       this.pendingPoint = null;
       this.hoverPoint = null;
       this.selectedAnnotationId = null;
+      this.snapPoint = null;
     }
     this._notify();
   },
@@ -44,8 +47,33 @@ const MeasurementState = {
       from: { x: Math.round(from.x), y: Math.round(from.y) },
       to: { x: Math.round(to.x), y: Math.round(to.y) }
     };
+    if (from.snapType) {
+      ann.from.snapType = from.snapType;
+    }
+    if (from.partId) {
+      ann.from.partId = from.partId;
+    }
+    if (from.partType) {
+      ann.from.partType = from.partType;
+    }
+    if (from.snapLabel) {
+      ann.from.snapLabel = from.snapLabel;
+    }
+    if (to.snapType) {
+      ann.to.snapType = to.snapType;
+    }
+    if (to.partId) {
+      ann.to.partId = to.partId;
+    }
+    if (to.partType) {
+      ann.to.partType = to.partType;
+    }
+    if (to.snapLabel) {
+      ann.to.snapLabel = to.snapLabel;
+    }
     this.annotations.push(ann);
     this.pendingPoint = null;
+    this.snapPoint = null;
     this._notify();
     return ann;
   },
@@ -63,16 +91,53 @@ const MeasurementState = {
     this._notify();
   },
 
-  setPendingPoint(x, y) {
+  setPendingPoint(x, y, snapInfo) {
     this.pendingPoint = { x: Math.round(x), y: Math.round(y) };
+    if (snapInfo) {
+      this.pendingPoint.snapType = snapInfo.type;
+      this.pendingPoint.partId = snapInfo.partId;
+      this.pendingPoint.partType = snapInfo.partType;
+      this.pendingPoint.snapLabel = snapInfo.label;
+    }
     this._notify();
   },
 
-  setHoverPoint(x, y) {
+  setHoverPoint(x, y, snapInfo) {
     if (x === null || y === null) {
       this.hoverPoint = null;
+      this.snapPoint = null;
     } else {
       this.hoverPoint = { x: Math.round(x), y: Math.round(y) };
+      if (snapInfo) {
+        this.hoverPoint.snapType = snapInfo.type;
+        this.hoverPoint.partId = snapInfo.partId;
+        this.hoverPoint.partType = snapInfo.partType;
+        this.hoverPoint.snapLabel = snapInfo.label;
+      }
+      this.snapPoint = snapInfo ? {
+        x: Math.round(snapInfo.x),
+        y: Math.round(snapInfo.y),
+        type: snapInfo.type,
+        partId: snapInfo.partId,
+        partType: snapInfo.partType,
+        label: snapInfo.label
+      } : null;
+    }
+    this._notify();
+  },
+
+  setSnapPoint(snapInfo) {
+    if (snapInfo) {
+      this.snapPoint = {
+        x: Math.round(snapInfo.x),
+        y: Math.round(snapInfo.y),
+        type: snapInfo.type,
+        partId: snapInfo.partId,
+        partType: snapInfo.partType,
+        label: snapInfo.label
+      };
+    } else {
+      this.snapPoint = null;
     }
     this._notify();
   },
@@ -80,6 +145,7 @@ const MeasurementState = {
   clearPending() {
     this.pendingPoint = null;
     this.hoverPoint = null;
+    this.snapPoint = null;
     this._notify();
   },
 
@@ -128,7 +194,8 @@ const MeasurementState = {
       scale: this.getScale(),
       pendingPoint: this.pendingPoint,
       hoverPoint: this.hoverPoint,
-      selectedAnnotationId: this.selectedAnnotationId
+      selectedAnnotationId: this.selectedAnnotationId,
+      snapPoint: this.snapPoint
     };
   }
 };
