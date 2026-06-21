@@ -112,6 +112,11 @@ const AssemblyPlayerState = {
     return this.stepCalculatorResult.installedPartIds(this.currentStep);
   },
 
+  getPreinstalledPartIds() {
+    if (!this.stepCalculatorResult || !this.isActive) return [];
+    return this.stepCalculatorResult.preinstalledPartIds || [];
+  },
+
   getAllPartIdsUpToLayer() {
     if (!this.stepCalculatorResult || !this.isActive) return null;
     const effectiveMaxLayer = this.targetLayer || Math.max(...this.layers, 0);
@@ -270,6 +275,7 @@ const AssemblyPlayerState = {
       layerSteps: this.layerSteps,
       currentStepInfo: this.getCurrentStepInfo(),
       installedPartIds: this.getInstalledPartIds(),
+      preinstalledPartIds: this.getPreinstalledPartIds(),
       canGoNext: this.currentStep < this.totalSteps - 1,
       canGoPrev: this.currentStep >= 0
     };

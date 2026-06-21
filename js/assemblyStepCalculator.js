@@ -1,7 +1,14 @@
 const AssemblyStepCalculator = {
   calculateSteps(scheme, options = {}) {
     if (!scheme || scheme.length === 0) {
-      return { steps: [], totalSteps: 0, layers: [], layerSteps: {} };
+      return {
+        steps: [],
+        totalSteps: 0,
+        layers: [],
+        layerSteps: {},
+        preinstalledPartIds: [],
+        allSteps: []
+      };
     }
 
     const sorted = this.sortByLayerAndConnection(scheme);
@@ -10,9 +17,25 @@ const AssemblyStepCalculator = {
     const layers = this.getLayers(scheme);
     const layerSteps = this.groupStepsByLayer(allSteps);
 
+    const startLayer = options.startLayer !== undefined && options.startLayer !== null
+      ? Number(options.startLayer)
+      : null;
+    const targetLayer = options.targetLayer !== undefined && options.targetLayer !== null
+      ? Number(options.targetLayer)
+      : null;
+
+    const preinstalledPartIds = [];
+    if (startLayer !== null) {
+      allSteps.forEach(step => {
+        if (step.layer < startLayer) {
+          preinstalledPartIds.push(step.partId);
+        }
+      });
+    }
+
     let steps = allSteps;
-    if (options.startLayer !== undefined && options.startLayer !== null) {
-      const startIdx = this._getFirstStepIndexForLayer(allSteps, options.startLayer);
+    if (startLayer !== null) {
+      const startIdx = this._getFirstStepIndexForLayer(allSteps, startLayer);
       if (startIdx > 0) {
         steps = allSteps.slice(startIdx).map((step, idx) => ({
           ...step,
@@ -20,10 +43,10 @@ const AssemblyStepCalculator = {
         }));
       }
     }
-    if (options.targetLayer !== undefined && options.targetLayer !== null) {
-      steps = steps.filter(s => s.layer <= options.targetLayer);
-      if (options.startLayer !== undefined && options.startLayer !== null) {
-        steps = steps.filter(s => s.layer >= options.startLayer);
+    if (targetLayer !== null) {
+      steps = steps.filter(s => s.layer <= targetLayer);
+      if (startLayer !== null) {
+        steps = steps.filter(s => s.layer >= startLayer);
       }
       steps = steps.map((step, idx) => ({ ...step, stepIndex: idx }));
     }
@@ -36,9 +59,12 @@ const AssemblyStepCalculator = {
       totalSteps: steps.length,
       layers,
       layerSteps: filteredLayerSteps,
+      preinstalledPartIds: preinstalledPartIds,
       installedPartIds: (stepIndex) => {
-        if (stepIndex < 0) return [];
-        return steps.slice(0, stepIndex + 1).map(s => s.partId);
+        const currentInstalled = stepIndex < 0
+          ? []
+          : steps.slice(0, stepIndex + 1).map(s => s.partId);
+        return preinstalledPartIds.concat(currentInstalled);
       },
       getFirstStepIndexForLayer: (layer) => this._getFirstStepIndexForLayer(steps, layer)
     };
