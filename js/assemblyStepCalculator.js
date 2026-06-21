@@ -1,20 +1,69 @@
 const AssemblyStepCalculator = {
-  calculateSteps(scheme) {
+  calculateSteps(scheme, options = {}) {
     if (!scheme || scheme.length === 0) {
-      return { steps: [], totalSteps: 0 };
+      return { steps: [], totalSteps: 0, layers: [], layerSteps: {} };
     }
 
     const sorted = this.sortByLayerAndConnection(scheme);
-    const steps = sorted.map((part, index) => this.createStep(part, index, sorted));
+    const allSteps = sorted.map((part, index) => this.createStep(part, index, sorted));
+
+    const layers = this.getLayers(scheme);
+    const layerSteps = this.groupStepsByLayer(allSteps);
+
+    let steps = allSteps;
+    if (options.startLayer !== undefined && options.startLayer !== null) {
+      const startIdx = this._getFirstStepIndexForLayer(allSteps, options.startLayer);
+      if (startIdx > 0) {
+        steps = allSteps.slice(startIdx).map((step, idx) => ({
+          ...step,
+          stepIndex: idx
+        }));
+      }
+    }
+    if (options.targetLayer !== undefined && options.targetLayer !== null) {
+      steps = steps.filter(s => s.layer <= options.targetLayer);
+      if (options.startLayer !== undefined && options.startLayer !== null) {
+        steps = steps.filter(s => s.layer >= options.startLayer);
+      }
+      steps = steps.map((step, idx) => ({ ...step, stepIndex: idx }));
+    }
+
+    const filteredLayerSteps = this.groupStepsByLayer(steps);
 
     return {
       steps,
+      allSteps,
       totalSteps: steps.length,
+      layers,
+      layerSteps: filteredLayerSteps,
       installedPartIds: (stepIndex) => {
         if (stepIndex < 0) return [];
         return steps.slice(0, stepIndex + 1).map(s => s.partId);
-      }
+      },
+      getFirstStepIndexForLayer: (layer) => this._getFirstStepIndexForLayer(steps, layer)
     };
+  },
+
+  getLayers(scheme) {
+    const layerSet = new Set();
+    scheme.forEach(p => layerSet.add(Number(p.layer) || 1));
+    return Array.from(layerSet).sort((a, b) => a - b);
+  },
+
+  groupStepsByLayer(steps) {
+    const grouped = {};
+    steps.forEach(step => {
+      if (!grouped[step.layer]) grouped[step.layer] = [];
+      grouped[step.layer].push(step.stepIndex);
+    });
+    return grouped;
+  },
+
+  _getFirstStepIndexForLayer(steps, layer) {
+    for (let i = 0; i < steps.length; i++) {
+      if (steps[i].layer >= layer) return i;
+    }
+    return steps.length;
   },
 
   sortByLayerAndConnection(scheme) {
@@ -79,17 +128,43 @@ const AssemblyStepCalculator = {
   createStep(part, index, allSortedParts) {
     const connectPoint = part.connect || "未设置";
     const hints = this.generateAssemblyHints(part, index, allSortedParts);
+    const layerDescription = this.getLayerDescription(part.layer);
+    const typeDescription = this.getTypeDescription(part.type);
 
     return {
       stepIndex: index,
       partId: part.id,
       partType: part.type,
+      typeDescription: typeDescription,
       layer: part.layer,
+      layerDescription: layerDescription,
       direction: part.dir,
       connectPoint: connectPoint,
       hints: hints,
       position: { x: part.x, y: part.y }
     };
+  },
+
+  getLayerDescription(layer) {
+    const descriptions = {
+      1: "基础层 · 最底层承重构件",
+      2: "第二层 · 过渡连接构件",
+      3: "第三层 · 主要受力构件",
+      4: "第四层 · 悬挑构件层",
+      5: "第五层 · 上层承重构件"
+    };
+    return descriptions[layer] || `第${layer}层 · 装配层`;
+  },
+
+  getTypeDescription(type) {
+    const descriptions = {
+      "栌斗": "斗拱最底部的方形斗，承托整个斗拱结构的基础构件",
+      "华拱": "水平方向伸出的拱构件，主要起悬挑和承重作用",
+      "昂": "斜向伸出的悬挑构件，具有杠杆作用，前端承挑檐檩",
+      "耍头": "位于昂后尾上方的装饰性与功能性构件，起平衡作用",
+      "散斗": "小型斗状构件，用于拱、昂等构件的节点承托"
+    };
+    return descriptions[type] || `${type}构件`;
   },
 
   generateAssemblyHints(part, index, allSortedParts) {

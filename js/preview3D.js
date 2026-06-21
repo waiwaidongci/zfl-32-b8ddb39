@@ -7,6 +7,9 @@ const Preview3D = (function() {
   let isExploded = false;
   let currentScheme = [];
   let highlightedIds = new Set();
+  let visiblePartIds = null;
+  let currentPartId = null;
+  let isAssemblyMode = false;
   let onSelectPart = null;
   let _selectionUnsub = null;
 
@@ -73,6 +76,79 @@ const Preview3D = (function() {
     ThreeScene.setParts(group);
     applyExplosion(isExploded);
     refreshHighlights();
+    refreshVisibility();
+    refreshCurrentPart();
+  }
+
+  function setAssemblyMode(active, opts) {
+    isAssemblyMode = !!active;
+    opts = opts || {};
+    visiblePartIds = opts.visiblePartIds ? new Set(opts.visiblePartIds) : null;
+    currentPartId = opts.currentPartId || null;
+    refreshVisibility();
+    refreshCurrentPart();
+  }
+
+  function setVisiblePartIds(ids) {
+    visiblePartIds = ids ? new Set(ids) : null;
+    refreshVisibility();
+  }
+
+  function setCurrentPartId(partId) {
+    currentPartId = partId || null;
+    refreshCurrentPart();
+  }
+
+  function refreshVisibility() {
+    const partsGroup = ThreeScene.getPartsGroup();
+    if (!partsGroup) return;
+
+    partsGroup.children.forEach(function(partGroup) {
+      const pid = partGroup.userData ? partGroup.userData.partId : null;
+      const shouldBeVisible = !visiblePartIds || (pid && visiblePartIds.has(pid));
+
+      partGroup.traverse(function(child) {
+        if (child.isMesh) {
+          child.visible = shouldBeVisible;
+        }
+      });
+    });
+  }
+
+  function refreshCurrentPart() {
+    const partsGroup = ThreeScene.getPartsGroup();
+    if (!partsGroup) return;
+
+    partsGroup.children.forEach(function(partGroup) {
+      const pid = partGroup.userData ? partGroup.userData.partId : null;
+      const isCurrent = pid && currentPartId && pid === currentPartId;
+
+      if (isCurrent) {
+        partGroup.traverse(function(child) {
+          if (child.isMesh) {
+            if (!child.userData._originalEmissive) {
+              child.userData._originalEmissive = child.material.emissive
+                ? child.material.emissive.getHex()
+                : 0;
+            }
+            if (child.material.emissive) {
+              child.material.emissive.setHex(0x664400);
+              child.material.emissiveIntensity = 0.4;
+            }
+          }
+        });
+      } else {
+        partGroup.traverse(function(child) {
+          if (child.isMesh && child.userData._originalEmissive !== undefined) {
+            if (child.material.emissive) {
+              child.material.emissive.setHex(child.userData._originalEmissive);
+              child.material.emissiveIntensity = 1;
+            }
+            delete child.userData._originalEmissive;
+          }
+        });
+      }
+    });
   }
 
   function setHighlightedIds(ids) {
@@ -125,6 +201,9 @@ const Preview3D = (function() {
     toggleView: toggleView,
     updateScheme: updateScheme,
     setHighlightedIds: setHighlightedIds,
+    setAssemblyMode: setAssemblyMode,
+    setVisiblePartIds: setVisiblePartIds,
+    setCurrentPartId: setCurrentPartId,
     focusOnPartIds: focusOnPartIds,
     toggleExplosion: toggleExplosion,
     setExploded: setExploded,

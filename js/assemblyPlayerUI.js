@@ -9,6 +9,10 @@ const AssemblyPlayerUI = {
   progressBar: null,
   progressText: null,
   speedSelect: null,
+  modeSelect: null,
+  startLayerSelect: null,
+  targetLayerSelect: null,
+  clearFilterBtn: null,
   unsubscribe: null,
 
   init(controlsId, stepInfoId, callbacks) {
@@ -58,6 +62,24 @@ const AssemblyPlayerUI = {
             <option value="500">快 (0.5s)</option>
           </select>
         </div>
+        <div class="player-mode" id="playerMode" style="display:none">
+          <label>模式</label>
+          <select id="playerModeSelect">
+            <option value="auto" selected>自动播放</option>
+            <option value="manual">手动步进</option>
+          </select>
+        </div>
+        <div class="player-layer-filter" id="playerLayerFilter" style="display:none">
+          <label>起始层</label>
+          <select id="playerStartLayerSelect">
+            <option value="">全部</option>
+          </select>
+          <label>截止层</label>
+          <select id="playerTargetLayerSelect">
+            <option value="">全部</option>
+          </select>
+          <button id="playerClearFilterBtn" class="secondary player-btn" title="清除筛选" style="min-width:auto;padding:0 8px;height:30px;font-size:12px;">清除</button>
+        </div>
       </div>
     `;
 
@@ -69,9 +91,15 @@ const AssemblyPlayerUI = {
     this.progressFill = this.controlsContainer.querySelector("#playerProgressFill");
     this.progressText = this.controlsContainer.querySelector("#playerProgressText");
     this.speedSelect = this.controlsContainer.querySelector("#playerSpeedSelect");
+    this.modeSelect = this.controlsContainer.querySelector("#playerModeSelect");
+    this.startLayerSelect = this.controlsContainer.querySelector("#playerStartLayerSelect");
+    this.targetLayerSelect = this.controlsContainer.querySelector("#playerTargetLayerSelect");
+    this.clearFilterBtn = this.controlsContainer.querySelector("#playerClearFilterBtn");
     this.controlsGroup = this.controlsContainer.querySelector("#playerControlsGroup");
     this.progressContainer = this.controlsContainer.querySelector("#playerProgress");
     this.speedContainer = this.controlsContainer.querySelector("#playerSpeed");
+    this.modeContainer = this.controlsContainer.querySelector("#playerMode");
+    this.layerFilterContainer = this.controlsContainer.querySelector("#playerLayerFilter");
   },
 
   renderStepInfoEmpty() {
@@ -81,11 +109,12 @@ const AssemblyPlayerUI = {
         <div class="step-info-icon">📦</div>
         <div class="step-info-title">装配演示</div>
         <div class="step-info-desc">点击"装配演示"按钮，查看斗拱构件的装配过程。</div>
+        <div class="step-info-desc" style="margin-top:8px;font-size:12px;color:#9a8c7e;">支持分层播放和手动步进模式，可选择只播放指定层级。</div>
       </div>
     `;
   },
 
-  renderStepInfo(stepInfo) {
+  renderStepInfo(stepInfo, state) {
     if (!this.stepInfoContainer) return;
 
     if (!stepInfo) {
@@ -97,6 +126,20 @@ const AssemblyPlayerUI = {
       `<div class="step-hint-item">💡 ${h}</div>`
     ).join("");
 
+    const layerFilterInfo = state && (state.startLayer || state.targetLayer)
+      ? `<div class="step-info-row step-filter-info">
+          <span class="step-info-label">层级范围：</span>
+          <span class="step-info-value">第 ${state.startLayer || 1} 层 至 第 ${state.targetLayer || Math.max(...state.layers, 1)} 层</span>
+        </div>`
+      : "";
+
+    const modeInfo = state
+      ? `<div class="step-info-row">
+          <span class="step-info-label">播放模式：</span>
+          <span class="step-info-value">${state.playbackMode === "manual" ? "手动步进" : "自动播放"}</span>
+        </div>`
+      : "";
+
     this.stepInfoContainer.innerHTML = `
       <div class="step-info">
         <div class="step-info-header">
@@ -104,6 +147,10 @@ const AssemblyPlayerUI = {
           <span class="step-layer-badge">第 ${stepInfo.layer} 层</span>
         </div>
         <div class="step-part-name">${stepInfo.partType}</div>
+        <div class="step-part-desc">${stepInfo.typeDescription || ""}</div>
+        <div class="step-layer-desc">${stepInfo.layerDescription || ""}</div>
+        ${layerFilterInfo}
+        ${modeInfo}
         <div class="step-info-row">
           <span class="step-info-label">方向：</span>
           <span class="step-info-value">${stepInfo.direction}</span>
@@ -152,13 +199,68 @@ const AssemblyPlayerUI = {
         AssemblyPlayerState.setSpeed(Number(e.target.value));
       };
     }
+
+    if (this.modeSelect) {
+      this.modeSelect.onchange = (e) => {
+        AssemblyPlayerState.setPlaybackMode(e.target.value);
+      };
+    }
+
+    if (this.startLayerSelect) {
+      this.startLayerSelect.onchange = (e) => {
+        const val = e.target.value;
+        if (val === "") {
+          AssemblyPlayerState.setStartLayer(null);
+        } else {
+          AssemblyPlayerState.setStartLayer(Number(val));
+        }
+      };
+    }
+
+    if (this.targetLayerSelect) {
+      this.targetLayerSelect.onchange = (e) => {
+        const val = e.target.value;
+        if (val === "") {
+          AssemblyPlayerState.setTargetLayer(null);
+        } else {
+          AssemblyPlayerState.setTargetLayer(Number(val));
+        }
+      };
+    }
+
+    if (this.clearFilterBtn) {
+      this.clearFilterBtn.onclick = () => {
+        AssemblyPlayerState.clearLayerFilter();
+      };
+    }
+  },
+
+  _updateLayerSelects(layers, startLayer, targetLayer) {
+    if (!this.startLayerSelect || !this.targetLayerSelect) return;
+
+    const buildOptions = (selectedVal) => {
+      let html = '<option value="">全部</option>';
+      layers.forEach(layer => {
+        const selected = String(selectedVal) === String(layer) ? " selected" : "";
+        html += `<option value="${layer}"${selected}>第 ${layer} 层</option>`;
+      });
+      return html;
+    };
+
+    this.startLayerSelect.innerHTML = buildOptions(startLayer);
+    this.targetLayerSelect.innerHTML = buildOptions(targetLayer);
   },
 
   updateUI(state) {
     this.updateControlsVisibility(state);
     this.updateButtonStates(state);
     this.updateProgress(state);
-    this.updateStepInfo(state);
+    this._updateLayerSelects(state.layers, state.startLayer, state.targetLayer);
+    this.updateStepInfoWithState(state);
+
+    if (this.modeSelect) {
+      this.modeSelect.value = state.playbackMode;
+    }
   },
 
   updateControlsVisibility(state) {
@@ -167,13 +269,17 @@ const AssemblyPlayerUI = {
       if (this.stopBtn) this.stopBtn.style.display = "inline-block";
       if (this.controlsGroup) this.controlsGroup.style.display = "inline-flex";
       if (this.progressContainer) this.progressContainer.style.display = "flex";
-      if (this.speedContainer) this.speedContainer.style.display = "flex";
+      if (this.speedContainer) this.speedContainer.style.display = state.playbackMode === "auto" ? "flex" : "none";
+      if (this.modeContainer) this.modeContainer.style.display = "flex";
+      if (this.layerFilterContainer) this.layerFilterContainer.style.display = "flex";
     } else {
       if (this.startBtn) this.startBtn.style.display = "inline-block";
       if (this.stopBtn) this.stopBtn.style.display = "none";
       if (this.controlsGroup) this.controlsGroup.style.display = "none";
       if (this.progressContainer) this.progressContainer.style.display = "none";
       if (this.speedContainer) this.speedContainer.style.display = "none";
+      if (this.modeContainer) this.modeContainer.style.display = "none";
+      if (this.layerFilterContainer) this.layerFilterContainer.style.display = "none";
     }
   },
 
@@ -189,7 +295,10 @@ const AssemblyPlayerUI = {
     }
 
     if (this.playPauseBtn) {
-      if (state.isPlaying) {
+      if (state.playbackMode === "manual") {
+        this.playPauseBtn.textContent = "▶▶";
+        this.playPauseBtn.title = "下一步";
+      } else if (state.isPlaying) {
         this.playPauseBtn.textContent = "⏸";
         this.playPauseBtn.title = "暂停";
       } else {
@@ -213,12 +322,16 @@ const AssemblyPlayerUI = {
     }
   },
 
-  updateStepInfo(state) {
+  updateStepInfoWithState(state) {
     if (state.isActive) {
-      this.renderStepInfo(state.currentStepInfo);
+      this.renderStepInfo(state.currentStepInfo, state);
     } else {
       this.renderStepInfoEmpty();
     }
+  },
+
+  updateStepInfo(state) {
+    this.updateStepInfoWithState(state);
   }
 };
 

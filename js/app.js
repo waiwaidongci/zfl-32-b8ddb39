@@ -649,6 +649,14 @@ const App = {
 
     Preview3D.updateScheme(this.scheme);
     Preview3D.setHighlightedIds(selectedSet);
+    if (isAssemblyMode) {
+      Preview3D.setAssemblyMode(true, {
+        visiblePartIds: playerState.installedPartIds,
+        currentPartId: playerState.currentStepInfo ? playerState.currentStepInfo.partId : null
+      });
+    } else {
+      Preview3D.setAssemblyMode(false);
+    }
 
     this._updateSaveButton();
   },
