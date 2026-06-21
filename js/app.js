@@ -968,22 +968,26 @@ const App = {
       this.canvas.querySelectorAll(".annotation-group").forEach(function(el) {
         el.onclick = function(event) {
           event.stopPropagation();
+          if (this._diffMode) return;
           MeasurementState.selectAnnotation(el.dataset.annotationId);
-        };
-      });
+        }.bind(this);
+      }.bind(this));
     }
 
     if (!isAssemblyMode) {
       var editorOpts = {
-        checkIssues: checkResult ? checkResult.issues : []
+        checkIssues: checkResult ? checkResult.issues : [],
+        readOnly: this._diffMode
       };
       ComponentEditor.renderEditor(this.editor, this.scheme, selectedSet,
         function(editorOptsInner) {
+          if (this._diffMode) return;
           this._markAutoLayoutManualEdit();
           this.refreshPlayerSteps();
           this.renderAll(editorOptsInner || {});
         }.bind(this),
         function(id) {
+          if (this._diffMode) return;
           AutoLayoutPanel.recordCurrentScheme(this.scheme);
           this.scheme = this.scheme.filter(function(x) { return x.id !== id; });
           SelectionManager.removeFromSelection(id);
@@ -1007,10 +1011,19 @@ const App = {
 
     AnnotationRenderer.renderMeasurementPanel(
       this.measurementPanel,
-      measureState,
-      function(id) { MeasurementState.removeAnnotation(id); },
-      function(id) { MeasurementState.selectAnnotation(id); },
-      function(px, unit) { MeasurementState.setScale(px, unit); }
+      Object.assign({}, measureState, { readOnly: this._diffMode }),
+      function(id) {
+        if (this._diffMode) return;
+        MeasurementState.removeAnnotation(id);
+      }.bind(this),
+      function(id) {
+        if (this._diffMode) return;
+        MeasurementState.selectAnnotation(id);
+      }.bind(this),
+      function(px, unit) {
+        if (this._diffMode) return;
+        MeasurementState.setScale(px, unit);
+      }.bind(this)
     );
 
     BatchPanel.render(SelectionManager.count());

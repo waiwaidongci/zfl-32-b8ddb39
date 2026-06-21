@@ -1,6 +1,7 @@
 const ComponentEditor = {
   renderEditor(editor, scheme, selected, onChange, onDelete, opts) {
     opts = opts || {};
+    var readOnly = !!opts.readOnly;
     var selectedIds = selected instanceof Set ? selected : new Set(selected ? [selected] : []);
     var p = scheme.find(function(x) { return selectedIds.has(x.id); });
     if (!p) {
@@ -48,17 +49,17 @@ const ComponentEditor = {
           <div class="item editor-item">
             <b>${p.type}</b>${multiCount}
             <label>层级</label>
-            <input id="layerInput" type="number" min="1" max="16" value="${p.layer}">
+            <input id="layerInput" type="number" min="1" max="16" value="${p.layer}" ${readOnly ? "disabled" : ""}>
             <label>方向</label>
-            <select id="dirInput">
+            <select id="dirInput" ${readOnly ? "disabled" : ""}>
               <option>正</option>
               <option>左挑</option>
               <option>右挑</option>
             </select>
             <label>连接点</label>
-            <input id="connectInput" value="${p.connect}">
+            <input id="connectInput" value="${p.connect}" ${readOnly ? "disabled" : ""}>
             ${suggestionHtml}
-            <button id="deleteBtn" class="secondary">删除构件</button>
+            <button id="deleteBtn" class="secondary" ${readOnly ? "disabled" : ""}>删除构件</button>
           </div>
         </div>
         <div class="detail-section-wrapper">
@@ -81,6 +82,7 @@ const ComponentEditor = {
     var layerInput = document.querySelector("#layerInput");
     if (layerInput) {
       layerInput.onchange = e => {
+        if (readOnly) return;
         p.layer = Number(e.target.value);
         onChange();
       };
@@ -88,6 +90,7 @@ const ComponentEditor = {
 
     if (dirInput) {
       dirInput.onchange = e => {
+        if (readOnly) return;
         p.dir = e.target.value;
         onChange();
       };
@@ -96,6 +99,7 @@ const ComponentEditor = {
     var connectInput = document.querySelector("#connectInput");
     if (connectInput) {
       connectInput.oninput = e => {
+        if (readOnly) return;
         p.connect = e.target.value;
         onChange({ treeAndChecksOnly: true });
       };
@@ -105,6 +109,7 @@ const ComponentEditor = {
     if (suggestionBtns && suggestionBtns.length > 0) {
       suggestionBtns.forEach(function(btn) {
         btn.onclick = function() {
+          if (readOnly) return;
           var value = btn.dataset.suggestion;
           if (value === undefined || value === null) return;
 
@@ -132,6 +137,7 @@ const ComponentEditor = {
     var deleteBtn = document.querySelector("#deleteBtn");
     if (deleteBtn) {
       deleteBtn.onclick = () => {
+        if (readOnly) return;
         onDelete(p.id);
       };
     }

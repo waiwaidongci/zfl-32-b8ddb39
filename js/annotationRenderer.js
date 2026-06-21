@@ -256,6 +256,7 @@ var AnnotationRenderer = {
   renderMeasurementPanel(panel, state, onDelete, onSelect, onScaleChange) {
     if (!panel) return;
 
+    var readOnly = !!(state && state.readOnly);
     var annotations = state.annotations || [];
     var html = "";
 
@@ -288,9 +289,9 @@ var AnnotationRenderer = {
     html += '<label>比例尺设置</label>';
     html += '<div class="scale-row">';
     html += '<span>1</span>';
-    html += '<input id="scalePixels" type="number" min="1" step="1" value="' + state.scale.pixelsPerUnit + '">';
+    html += '<input id="scalePixels" type="number" min="1" step="1" value="' + state.scale.pixelsPerUnit + '"' + (readOnly ? ' disabled' : '') + '>';
     html += '<span>像素 = 1</span>';
-    html += '<input id="scaleUnit" type="text" value="' + state.scale.unitName + '">';
+    html += '<input id="scaleUnit" type="text" value="' + state.scale.unitName + '"' + (readOnly ? ' disabled' : '') + '>';
     html += '</div>';
     html += '<div class="measurement-hint">调整比例，使标注显示正确的实际尺寸</div>';
     html += '</div>';
@@ -321,7 +322,7 @@ var AnnotationRenderer = {
         html += '<span class="ann-dist">' + distText + '</span>';
         html += snapInfo;
         html += '</div>';
-        html += '<button class="ann-delete" data-ann-delete="' + ann.id + '" title="删除此标注">×</button>';
+        html += '<button class="ann-delete" data-ann-delete="' + ann.id + '" title="删除此标注"' + (readOnly ? ' disabled' : '') + '>×</button>';
         html += '</div>';
       }
       html += '</div>';
@@ -335,6 +336,7 @@ var AnnotationRenderer = {
     var scaleUnitInput = panel.querySelector("#scaleUnit");
     if (scalePxInput && scaleUnitInput) {
       var handleScaleChange = function () {
+        if (readOnly) return;
         var px = Number(scalePxInput.value);
         var unit = scaleUnitInput.value;
         if (onScaleChange) onScaleChange(px, unit);
@@ -348,6 +350,7 @@ var AnnotationRenderer = {
     panel.querySelectorAll("[data-ann-id]").forEach(function (el) {
       el.onclick = function (e) {
         if (e.target.hasAttribute("data-ann-delete")) return;
+        if (readOnly) return;
         if (onSelect) onSelect(el.dataset.annId);
       };
     });
@@ -355,6 +358,7 @@ var AnnotationRenderer = {
     panel.querySelectorAll("[data-ann-delete]").forEach(function (btn) {
       btn.onclick = function (e) {
         e.stopPropagation();
+        if (readOnly) return;
         if (onDelete) onDelete(btn.dataset.annDelete);
       };
     });
