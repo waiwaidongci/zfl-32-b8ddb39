@@ -5,6 +5,7 @@ const Renderer = {
     const currentPartId = opts.currentPartId || null;
     const isAssemblyMode = opts.isAssemblyMode || false;
     const selectedSet = selected instanceof Set ? selected : new Set(selected ? [selected] : []);
+    const previewState = opts.previewState || null;
 
     if (isAssemblyMode) {
       canvas.classList.add("assembly-mode");
@@ -12,20 +13,89 @@ const Renderer = {
       canvas.classList.remove("assembly-mode");
     }
 
-    canvas.innerHTML = scheme.map(p => {
+    if (previewState && previewState.isPreviewing) {
+      canvas.classList.add("repair-preview-mode");
+    } else {
+      canvas.classList.remove("repair-preview-mode");
+    }
+
+    const positionAdjustSet = new Set();
+    const connectUpdateSet = new Set();
+    const symmetryAddSet = new Set();
+    const previewPositions = {};
+
+    if (previewState && previewState.repairPlan) {
+      const plan = previewState.repairPlan;
+      plan.groupedByType.position_adjust.forEach(a => {
+        positionAdjustSet.add(a.partId);
+        previewPositions[a.partId] = a.after;
+      });
+      plan.groupedByType.connect_update.forEach(a => connectUpdateSet.add(a.partId));
+      plan.groupedByType.symmetry_add.forEach(a => symmetryAddSet.add(a.partId));
+    }
+
+    let html = scheme.map(p => {
       const classes = ["part", p.type];
       if (selectedSet.has(p.id)) classes.push("selected");
       if (selectedSet.size > 1 && selectedSet.has(p.id)) classes.push("multi-selected");
       if (errorSet.has(p.id)) classes.push("has-error");
       if (p.id === currentPartId) classes.push("assembly-current");
       if (visibleSet && !visibleSet.has(p.id)) classes.push("assembly-hidden");
-      return '<div class="' + classes.join(" ") + '" data-id="' + p.id +
-        '" style="left:' + p.x + 'px;top:' + p.y + 'px;--explode:' + (-p.layer * 34) + 'px">' +
-        p.type + '</div>';
+
+      let previewClass = "";
+      let previewStyle = "";
+      let overlayHtml = "";
+
+      if (previewState && previewState.isPreviewing) {
+        if (positionAdjustSet.has(p.id)) {
+          previewClass = " preview-position-adjust";
+          const pos = previewPositions[p.id];
+          previewStyle = ';--preview-left:' + pos.x + 'px;--preview-top:' + pos.y + 'px';
+          overlayHtml = '<div class="preview-overlay preview-new-position" style="left:' + pos.x + 'px;top:' + pos.y + 'px"></div>';
+        }
+        if (connectUpdateSet.has(p.id) && !positionAdjustSet.has(p.id)) {
+          previewClass = " preview-connect-update";
+        }
+        if (symmetryAddSet.has(p.id)) {
+          previewClass = " preview-symmetry-add";
+        }
+      }
+
+      return '<div class="' + classes.join(" ") + previewClass + '" data-id="' + p.id +
+        '" style="left:' + p.x + 'px;top:' + p.y + 'px;--explode:' + (-p.layer * 34) + 'px' + previewStyle + '">' +
+        p.type + overlayHtml + '</div>';
     }).join("");
 
+    if (previewState && previewState.isPreviewing && previewState.showGhostOriginals) {
+      scheme.forEach(p => {
+        if (positionAdjustSet.has(p.id)) {
+          const pos = previewPositions[p.id];
+          html += '<div class="part ghost-original ' + p.type + '" data-ghost-id="' + p.id +
+            '" style="left:' + p.x + 'px;top:' + p.y + 'px;--explode:' + (-p.layer * 34) + 'px;opacity:0.3;pointer-events:none">' +
+            p.type + '</div>';
+        }
+      });
+    }
+
+    if (previewState && previewState.isPreviewing && previewState.repairPlan) {
+      const symmetryActions = previewState.repairPlan.groupedByType.symmetry_add;
+      symmetryActions.forEach(action => {
+        if (action.after) {
+          const exists = scheme.some(p => p.id === action.partId);
+          if (!exists) {
+            html += '<div class="part preview-symmetry-add ' + action.partType + '" data-preview-id="' + action.partId +
+              '" style="left:' + action.after.x + 'px;top:' + action.after.y +
+              'px;--explode:' + (-action.after.layer * 34) + 'px;opacity:0.7;pointer-events:none;border-style:dashed;">' +
+              '<span style="font-size:10px;opacity:0.8;">(新增)</span> ' + action.partType + '</div>';
+          }
+        }
+      });
+    }
+
+    canvas.innerHTML = html;
+
     if (!isAssemblyMode) {
-      canvas.querySelectorAll(".part").forEach(el => {
+      canvas.querySelectorAll(".part:not(.ghost-original)").forEach(el => {
         el.onpointerdown = event => {
           const id = el.dataset.id;
           onSelect(id, event.offsetX, event.offsetY, event.shiftKey);

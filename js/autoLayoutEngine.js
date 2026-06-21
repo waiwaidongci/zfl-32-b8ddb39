@@ -739,11 +739,91 @@ const AutoLayoutEngine = (function() {
     return selected;
   }
 
-  function repairScheme(scheme, config) {
+  function _buildRepairActions(originalScheme, repairedScheme, config) {
+    var actions = [];
+    var originalMap = {};
+    originalScheme.forEach(function(p) { originalMap[p.id] = Object.assign({}, p); });
+
+    repairedScheme.forEach(function(p) {
+      var orig = originalMap[p.id];
+      if (!orig) {
+        actions.push({
+          type: 'symmetry_add',
+          partId: p.id,
+          partType: p.type,
+          layer: p.layer,
+          constraint: '左右对称约束',
+          reason: '开启对称模式后，检测到该层缺少对称配对构件，需自动补齐镜像构件',
+          before: null,
+          after: {
+            x: p.x,
+            y: p.y,
+            layer: p.layer,
+            dir: p.dir,
+            connect: p.connect
+          }
+        });
+      } else {
+        var yChanged = Math.abs(orig.y - p.y) > 1;
+        var connectChanged = orig.connect !== p.connect;
+
+        if (yChanged) {
+          actions.push({
+            type: 'position_adjust',
+            partId: p.id,
+            partType: p.type,
+            layer: p.layer,
+            constraint: '垂直对齐约束',
+            reason: '该构件与下层承托构件的垂直间距超出容许范围（' + AssemblyRules.GAP_TOLERANCE_Y_MIN + '~' + AssemblyRules.GAP_TOLERANCE_Y_MAX + 'px），需校准到标准间距',
+            before: { x: orig.x, y: orig.y, connect: orig.connect },
+            after: { x: p.x, y: p.y, connect: p.connect }
+          });
+        }
+
+        if (connectChanged && !yChanged) {
+          actions.push({
+            type: 'connect_update',
+            partId: p.id,
+            partType: p.type,
+            layer: p.layer,
+            constraint: '连接点准确性约束',
+            reason: '连接点描述与实际相邻构件的位置关系不完全匹配，需更新为更准确的连接描述',
+            before: { connect: orig.connect },
+            after: { connect: p.connect }
+          });
+        } else if (connectChanged && yChanged) {
+          actions.push({
+            type: 'connect_update',
+            partId: p.id,
+            partType: p.type,
+            layer: p.layer,
+            constraint: '连接点准确性约束',
+            reason: '构件位置调整后，连接点描述需同步更新以反映新的相邻关系',
+            before: { connect: orig.connect },
+            after: { connect: p.connect }
+          });
+        }
+      }
+    });
+
+    return actions;
+  }
+
+  function _groupActionsByType(actions) {
+    var grouped = {
+      position_adjust: [],
+      connect_update: [],
+      symmetry_add: []
+    };
+    actions.forEach(function(a) {
+      if (grouped[a.type]) grouped[a.type].push(a);
+    });
+    return grouped;
+  }
+
+  function previewRepairPlan(scheme, config) {
     var originalScheme = scheme.slice().map(function(p) { return Object.assign({}, p); });
     var repaired = scheme.slice().map(function(p) { return Object.assign({}, p); });
-    var targetLayers = config.targetLayers || 4;
-    var partsPerLayer = config.partsPerLayer || 3;
     var symmetric = !!config.symmetric;
 
     for (var pass = 0; pass < 2; pass++) {
@@ -811,12 +891,46 @@ const AutoLayoutEngine = (function() {
       repaired = repaired.concat(toAdd);
     }
 
-    return repaired;
+    var actions = _buildRepairActions(originalScheme, repaired, config);
+    var grouped = _groupActionsByType(actions);
+
+    var stats = {
+      totalActions: actions.length,
+      positionAdjustCount: grouped.position_adjust.length,
+      connectUpdateCount: grouped.connect_update.length,
+      symmetryAddCount: grouped.symmetry_add.length
+    };
+
+    var affectedPartIds = new Set();
+    actions.forEach(function(a) {
+      if (a.partId) affectedPartIds.add(a.partId);
+    });
+
+    return {
+      originalScheme: originalScheme,
+      previewScheme: repaired,
+      actions: actions,
+      groupedByType: grouped,
+      stats: stats,
+      affectedPartIds: Array.from(affectedPartIds),
+      hasChanges: actions.length > 0
+    };
+  }
+
+  function applyRepairPlan(repairPlan) {
+    return repairPlan.previewScheme.slice().map(function(p) { return Object.assign({}, p); });
+  }
+
+  function repairScheme(scheme, config) {
+    var plan = previewRepairPlan(scheme, config);
+    return applyRepairPlan(plan);
   }
 
   return {
     generateScheme: generateScheme,
-    repairScheme: repairScheme
+    repairScheme: repairScheme,
+    previewRepairPlan: previewRepairPlan,
+    applyRepairPlan: applyRepairPlan
   };
 })();
 

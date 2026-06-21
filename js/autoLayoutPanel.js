@@ -9,6 +9,9 @@ const AutoLayoutPanel = (function() {
   var _protectedMode = true;
   var _lastSchemeSnapshot = null;
   var _PRESET_STORAGE_KEY = "autoLayout_presets";
+  var _currentRepairPlan = null;
+  var _savedSelectionBeforePreview = null;
+  var _savedSchemeBeforePreview = null;
 
   function _getPresets() {
     try {
@@ -379,7 +382,10 @@ const AutoLayoutPanel = (function() {
   }
 
   function onRepair() {
-    if (_callbacks.onRepair) {
+    if (_callbacks.onPreviewRepair) {
+      var config = getConfig();
+      _callbacks.onPreviewRepair(config);
+    } else if (_callbacks.onRepair) {
       var config = getConfig();
       var result = _callbacks.onRepair(config);
       if (result) {
@@ -406,6 +412,231 @@ const AutoLayoutPanel = (function() {
     html += items.join('，');
     html += '</div>';
     reportEl.innerHTML = html;
+  }
+
+  function _formatActionDiff(action) {
+    if (action.type === 'position_adjust' && action.before && action.after) {
+      var dy = action.after.y - action.before.y;
+      var dir = dy > 0 ? '↓' : '↑';
+      return '<span class="repair-diff-before">Y:' + action.before.y + '</span>' +
+             '<span class="repair-diff-arrow">→</span>' +
+             '<span class="repair-diff-after">Y:' + action.after.y + ' (' + dir + Math.abs(dy) + 'px)</span>';
+    }
+    if (action.type === 'connect_update' && action.before && action.after) {
+      return '<span class="repair-diff-before">' + (action.before.connect || '(空)') + '</span>' +
+             '<span class="repair-diff-arrow">→</span>' +
+             '<span class="repair-diff-after">' + (action.after.connect || '(空)') + '</span>';
+    }
+    if (action.type === 'symmetry_add' && action.after) {
+      return '<span class="repair-diff-after">新增 ' + action.partType + ' @ X:' + action.after.x + ', Y:' + action.after.y + '</span>';
+    }
+    return '';
+  }
+
+  function _renderActionGroup(type, actions, typeLabel, icon) {
+    if (actions.length === 0) return '';
+
+    var typeClass = type === 'position_adjust' ? 'position' : (type === 'connect_update' ? 'connect' : 'symmetry');
+
+    var itemsHtml = actions.map(function(action, idx) {
+      var title = '';
+      if (action.type === 'position_adjust') {
+        title = '移动 ' + action.partType + '（第' + action.layer + '层）';
+      } else if (action.type === 'connect_update') {
+        title = '更新 ' + action.partType + '（第' + action.layer + '层）连接点';
+      } else if (action.type === 'symmetry_add') {
+        title = '新增对称构件 ' + action.partType + '（第' + action.layer + '层）';
+      }
+
+      return '<div class="repair-action-item ' + typeClass + '" data-part-id="' + (action.partId || '') + '" data-action-idx="' + idx + '">' +
+               '<div class="repair-action-title">' + title + '</div>' +
+               '<div class="repair-action-constraint">' + action.constraint + '</div>' +
+               '<div class="repair-action-reason">' + action.reason + '</div>' +
+               '<div class="repair-action-diff">' + _formatActionDiff(action) + '</div>' +
+             '</div>';
+    }).join('');
+
+    return '<div class="repair-action-group">' +
+             '<div class="repair-group-header ' + typeClass + '">' +
+               '<span class="repair-group-badge">' + actions.length + '</span>' +
+               '<span>' + icon + ' ' + typeLabel + '</span>' +
+             '</div>' +
+             itemsHtml +
+           '</div>';
+  }
+
+  function showRepairPlan(repairPlan, callbacks) {
+    _currentRepairPlan = repairPlan;
+    callbacks = callbacks || {};
+
+    var overlay = document.createElement("div");
+    overlay.className = "autoLayout-confirm-overlay";
+    overlay.id = "repairPlanOverlay";
+
+    var stats = repairPlan.stats;
+    var hasChanges = repairPlan.hasChanges;
+
+    var html = '';
+
+    if (!hasChanges) {
+      html = '<div class="repair-plan-panel">' +
+               '<div class="repair-plan-header">' +
+                 '<h3 class="repair-plan-title">✨ 方案状态良好</h3>' +
+                 '<p class="repair-plan-subtitle">当前方案未检测到需要修复的问题</p>' +
+               '</div>' +
+               '<div class="repair-plan-empty">' +
+                 '<div class="repair-plan-empty-icon">✓</div>' +
+                 '<div class="repair-plan-empty-title">无需调整</div>' +
+                 '<div class="repair-plan-empty-desc">所有构件位置、连接点和对称性均符合约束要求</div>' +
+               '</div>' +
+               '<div class="repair-plan-footer">' +
+                 '<button class="secondary repair-cancel-btn" id="repairPlanCloseBtn">关闭</button>' +
+               '</div>' +
+             '</div>';
+    } else {
+      html = '<div class="repair-plan-panel">' +
+               '<div class="repair-plan-header">' +
+                 '<h3 class="repair-plan-title">🔧 智能修复计划预览</h3>' +
+                 '<p class="repair-plan-subtitle">本次修复将执行以下操作，请确认后应用</p>' +
+               '</div>' +
+               '<div class="repair-plan-stats">' +
+                 '<div class="repair-stat-item position">' +
+                   '<div class="repair-stat-count">' + stats.positionAdjustCount + '</div>' +
+                   '<div class="repair-stat-label">位置调整</div>' +
+                 '</div>' +
+                 '<div class="repair-stat-item connect">' +
+                   '<div class="repair-stat-count">' + stats.connectUpdateCount + '</div>' +
+                   '<div class="repair-stat-label">连接点更新</div>' +
+                 '</div>' +
+                 '<div class="repair-stat-item symmetry">' +
+                   '<div class="repair-stat-count">' + stats.symmetryAddCount + '</div>' +
+                   '<div class="repair-stat-label">对称补齐</div>' +
+                 '</div>' +
+               '</div>' +
+               '<div class="repair-legend">' +
+                 '<div class="repair-legend-item">' +
+                   '<span class="repair-legend-dot position"></span>' +
+                   '<span>位置调整（蓝色）</span>' +
+                 '</div>' +
+                 '<div class="repair-legend-item">' +
+                   '<span class="repair-legend-dot connect"></span>' +
+                   '<span>连接点更新（紫色）</span>' +
+                 '</div>' +
+                 '<div class="repair-legend-item">' +
+                   '<span class="repair-legend-dot symmetry"></span>' +
+                   '<span>对称补齐（绿色）</span>' +
+                 '</div>' +
+               '</div>' +
+               '<div class="repair-plan-actions">' +
+                 _renderActionGroup('position_adjust', repairPlan.groupedByType.position_adjust, '位置校准', '📐') +
+                 _renderActionGroup('connect_update', repairPlan.groupedByType.connect_update, '连接点更新', '🔗') +
+                 _renderActionGroup('symmetry_add', repairPlan.groupedByType.symmetry_add, '对称构件补齐', '⚖️') +
+               '</div>' +
+               '<div class="repair-plan-footer">' +
+                 '<button class="secondary repair-cancel-btn" id="repairPlanCancelBtn">取消</button>' +
+                 '<button class="secondary" id="repairPlanTogglePreviewBtn">切换预览</button>' +
+                 '<button class="repair-confirm-btn" id="repairPlanConfirmBtn">✓ 确认应用</button>' +
+               '</div>' +
+             '</div>';
+    }
+
+    overlay.innerHTML = html;
+    document.body.appendChild(overlay);
+
+    if (!hasChanges) {
+      overlay.querySelector("#repairPlanCloseBtn").onclick = function() {
+        document.body.removeChild(overlay);
+        _currentRepairPlan = null;
+        if (callbacks.onClose) callbacks.onClose();
+      };
+    } else {
+      overlay.querySelectorAll(".repair-action-item").forEach(function(el) {
+        el.onclick = function() {
+          var partId = el.dataset.partId;
+          if (partId && callbacks.onSelectPart) {
+            callbacks.onSelectPart(partId);
+          }
+        };
+      });
+
+      overlay.querySelector("#repairPlanCancelBtn").onclick = function() {
+        document.body.removeChild(overlay);
+        _currentRepairPlan = null;
+        if (callbacks.onCancel) callbacks.onCancel();
+      };
+
+      var previewVisible = true;
+      overlay.querySelector("#repairPlanTogglePreviewBtn").onclick = function() {
+        previewVisible = !previewVisible;
+        if (callbacks.onTogglePreview) {
+          callbacks.onTogglePreview(previewVisible);
+        }
+      };
+
+      overlay.querySelector("#repairPlanConfirmBtn").onclick = function() {
+        document.body.removeChild(overlay);
+        var plan = _currentRepairPlan;
+        _currentRepairPlan = null;
+        if (callbacks.onConfirm) {
+          callbacks.onConfirm(plan);
+        }
+      };
+    }
+
+    overlay.onclick = function(e) {
+      if (e.target === overlay) {
+        document.body.removeChild(overlay);
+        _currentRepairPlan = null;
+        if (callbacks.onCancel) callbacks.onCancel();
+      }
+    };
+
+    var escHandler = function(e) {
+      if (e.key === "Escape") {
+        if (document.body.contains(overlay)) {
+          document.body.removeChild(overlay);
+        }
+        _currentRepairPlan = null;
+        document.removeEventListener("keydown", escHandler);
+        if (callbacks.onCancel) callbacks.onCancel();
+      }
+    };
+    document.addEventListener("keydown", escHandler);
+
+    return overlay;
+  }
+
+  function setRepairPreviewState(isPreviewing, repairPlan, showGhostOriginals) {
+    if (_callbacks.onPreviewStateChange) {
+      _callbacks.onPreviewStateChange({
+        isPreviewing: isPreviewing,
+        repairPlan: repairPlan || _currentRepairPlan,
+        showGhostOriginals: showGhostOriginals !== false
+      });
+    }
+  }
+
+  function clearRepairPreview() {
+    setRepairPreviewState(false, null, false);
+  }
+
+  function saveStateBeforePreview(scheme, selection) {
+    _savedSchemeBeforePreview = scheme ? scheme.map(function(p) { return Object.assign({}, p); }) : null;
+    _savedSelectionBeforePreview = selection ? selection.slice() : null;
+  }
+
+  function restoreStateBeforePreview() {
+    var result = {
+      scheme: _savedSchemeBeforePreview,
+      selection: _savedSelectionBeforePreview
+    };
+    _savedSchemeBeforePreview = null;
+    _savedSelectionBeforePreview = null;
+    return result;
+  }
+
+  function getCurrentRepairPlan() {
+    return _currentRepairPlan;
   }
 
   function onGenerate() {
@@ -765,6 +996,13 @@ const AutoLayoutPanel = (function() {
     recordCurrentScheme: recordCurrentScheme,
     showConflictReport: showConflictReport,
     showResult: showResult,
+    showRepairResult: showRepairResult,
+    showRepairPlan: showRepairPlan,
+    setRepairPreviewState: setRepairPreviewState,
+    clearRepairPreview: clearRepairPreview,
+    saveStateBeforePreview: saveStateBeforePreview,
+    restoreStateBeforePreview: restoreStateBeforePreview,
+    getCurrentRepairPlan: getCurrentRepairPlan,
     render: render,
     canUndo: canUndo,
     canRedo: canRedo,

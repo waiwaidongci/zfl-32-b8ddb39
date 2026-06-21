@@ -30,6 +30,8 @@ const App = {
   measurementUnsubscribe: null,
   selectionUnsubscribe: null,
   _autoLayoutManualEdits: false,
+  _repairPreviewState: null,
+  _showGhostOriginals: true,
 
   _getSelectedSet() {
     return new Set(SelectionManager.getIds());
@@ -218,12 +220,18 @@ const App = {
       onGenerate: function(config) { return self._onAutoLayoutGenerate(config); },
       onRecheck: function() { return self._onAutoLayoutRecheck(); },
       onRepair: function(config) { return self._onAutoLayoutRepair(config); },
+      onPreviewRepair: function(config) { return self._onAutoLayoutPreviewRepair(config); },
+      onPreviewStateChange: function(state) { return self._onPreviewStateChange(state); },
       onRestoreHistory: function(scheme) { return self._onAutoLayoutRestoreHistory(scheme); },
       onSelectPart: function(id) { self.selectPartById(id); }
     });
   },
 
   _onAutoLayoutGenerate(config) {
+    this._repairPreviewState = null;
+    this._showGhostOriginals = true;
+    AutoLayoutPanel.clearRepairPreview();
+
     var scheme = AutoLayoutEngine.generateScheme(config);
     this.scheme = scheme;
     this._autoLayoutManualEdits = false;
@@ -281,7 +289,119 @@ const App = {
     };
   },
 
+  _onAutoLayoutPreviewRepair(config) {
+    var self = this;
+    var currentSelection = SelectionManager.getIds();
+    AutoLayoutPanel.saveStateBeforePreview(this.scheme, currentSelection);
+
+    var repairPlan = AutoLayoutEngine.previewRepairPlan(this.scheme, config);
+
+    this._repairPreviewState = {
+      isPreviewing: true,
+      repairPlan: repairPlan,
+      showGhostOriginals: this._showGhostOriginals
+    };
+
+    this._highlightAffectedParts(repairPlan);
+    this.renderAll();
+
+    AutoLayoutPanel.showRepairPlan(repairPlan, {
+      onConfirm: function(plan) {
+        self._applyConfirmedRepair(plan);
+      },
+      onCancel: function() {
+        self._cancelRepairPreview();
+      },
+      onClose: function() {
+        self._cancelRepairPreview();
+      },
+      onTogglePreview: function(visible) {
+        self._toggleRepairPreview(visible);
+      },
+      onSelectPart: function(partId) {
+        self.selectPartById(partId);
+      }
+    });
+  },
+
+  _onPreviewStateChange(state) {
+    this._repairPreviewState = state;
+    this.renderAll();
+  },
+
+  _highlightAffectedParts(repairPlan) {
+    if (!repairPlan || !repairPlan.affectedPartIds) return;
+    SelectionManager.setSelection(repairPlan.affectedPartIds);
+  },
+
+  _toggleRepairPreview(visible) {
+    if (!this._repairPreviewState) return;
+
+    if (visible) {
+      this._repairPreviewState.isPreviewing = true;
+      this._showGhostOriginals = true;
+      this._highlightAffectedParts(this._repairPreviewState.repairPlan);
+    } else {
+      this._repairPreviewState.isPreviewing = false;
+      this._showGhostOriginals = false;
+      var restored = AutoLayoutPanel.restoreStateBeforePreview();
+      if (restored && restored.selection) {
+        SelectionManager.setSelection(restored.selection);
+      }
+      AutoLayoutPanel.saveStateBeforePreview(this.scheme, SelectionManager.getIds());
+    }
+    this.renderAll();
+  },
+
+  _cancelRepairPreview() {
+    var restored = AutoLayoutPanel.restoreStateBeforePreview();
+
+    this._repairPreviewState = null;
+    this._showGhostOriginals = true;
+
+    if (restored && restored.selection) {
+      SelectionManager.setSelection(restored.selection);
+    }
+
+    AutoLayoutPanel.clearRepairPreview();
+    this.renderAll();
+  },
+
+  _applyConfirmedRepair(repairPlan) {
+    var originalScheme = this.scheme.map(function(p) { return Object.assign({}, p); });
+
+    AutoLayoutPanel.recordCurrentScheme(this.scheme);
+
+    var repairedScheme = AutoLayoutEngine.applyRepairPlan(repairPlan);
+
+    this._repairPreviewState = null;
+    this._showGhostOriginals = true;
+    AutoLayoutPanel.clearRepairPreview();
+
+    this.scheme = repairedScheme;
+    this._markAutoLayoutManualEdit();
+    SelectionManager.clear();
+    this.refreshPlayerSteps();
+    this.renderAll();
+
+    var yAdjusted = repairPlan.stats.positionAdjustCount;
+    var connectUpdated = repairPlan.stats.connectUpdateCount;
+    var symmetryAdded = repairPlan.stats.symmetryAddCount;
+    var totalChanges = repairPlan.stats.totalActions;
+
+    AutoLayoutPanel.showRepairResult({
+      changes: totalChanges,
+      yAdjusted: yAdjusted,
+      connectUpdated: connectUpdated,
+      symmetryAdded: Math.max(0, symmetryAdded)
+    });
+  },
+
   _onAutoLayoutRestoreHistory(scheme) {
+    this._repairPreviewState = null;
+    this._showGhostOriginals = true;
+    AutoLayoutPanel.clearRepairPreview();
+
     this.scheme = scheme.map(function(p) { return Object.assign({}, p); });
     SelectionManager.clear();
     this.refreshPlayerSteps();
@@ -600,9 +720,13 @@ const App = {
     }
 
     if (!opts.editorOnly && !opts.treeAndChecksOnly) {
+      var renderOptsWithPreview = Object.assign({}, renderOpts, {
+        previewState: this._repairPreviewState
+      });
       Renderer.render(this.canvas, this.scheme, selectedSet, this.errorPartIds, function(id, ox, oy, shiftKey) {
         if (AssemblyPlayerState.isActive) return;
         if (MeasurementState.isActive) return;
+        if (this._repairPreviewState && this._repairPreviewState.isPreviewing) return;
         if (shiftKey) {
           SelectionManager.toggle(id);
         } else {
@@ -610,7 +734,7 @@ const App = {
         }
         this.drag = { id: id, ox: ox, oy: oy };
         this.renderAll();
-      }.bind(this), renderOpts);
+      }.bind(this), renderOptsWithPreview);
 
       AnnotationRenderer.render(this.canvas, measureState);
 
