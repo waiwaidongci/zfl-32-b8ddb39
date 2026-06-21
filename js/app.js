@@ -583,6 +583,22 @@ const App = {
     var measureState = MeasurementState.getState();
     var selectedSet = this._getSelectedSet();
 
+    var checkResult = null;
+    if (!isAssemblyMode) {
+      checkResult = AssemblyChecker.checkAll(this.scheme, this.parts);
+      this.errorPartIds = [];
+      for (var i = 0; i < checkResult.issues.length; i++) {
+        var issue = checkResult.issues[i];
+        if (issue.severity === "error") {
+          this.errorPartIds.push(issue.partId);
+          if (issue.relatedPartIds) {
+            this.errorPartIds.push.apply(this.errorPartIds, issue.relatedPartIds);
+          }
+        }
+      }
+      this.errorPartIds = Array.from(new Set(this.errorPartIds));
+    }
+
     if (!opts.editorOnly && !opts.treeAndChecksOnly) {
       Renderer.render(this.canvas, this.scheme, selectedSet, this.errorPartIds, function(id, ox, oy, shiftKey) {
         if (AssemblyPlayerState.isActive) return;
@@ -607,11 +623,14 @@ const App = {
     }
 
     if (!isAssemblyMode) {
+      var editorOpts = {
+        checkIssues: checkResult ? checkResult.issues : []
+      };
       ComponentEditor.renderEditor(this.editor, this.scheme, selectedSet,
-        function(editorOpts) {
+        function(editorOptsInner) {
           this._markAutoLayoutManualEdit();
           this.refreshPlayerSteps();
-          this.renderAll(editorOpts || {});
+          this.renderAll(editorOptsInner || {});
         }.bind(this),
         function(id) {
           AutoLayoutPanel.recordCurrentScheme(this.scheme);
@@ -620,17 +639,18 @@ const App = {
           this._markAutoLayoutManualEdit();
           this.refreshPlayerSteps();
           this.renderAll();
-        }.bind(this)
+        }.bind(this),
+        editorOpts
       );
     }
 
     if (!opts.editorOnly) {
       if (!isAssemblyMode) {
         Renderer.renderTree(this.tree, this.scheme);
-        var checkResult = Renderer.renderChecks(this.checks, this.scheme, this.parts,
-          function(ids) { this.selectPartsByIds(ids); }.bind(this)
+        Renderer.renderChecks(this.checks, this.scheme, this.parts,
+          function(ids) { this.selectPartsByIds(ids); }.bind(this),
+          checkResult
         );
-        this.errorPartIds = checkResult.errorPartIds;
       }
     }
 

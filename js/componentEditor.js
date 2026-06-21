@@ -1,5 +1,6 @@
 const ComponentEditor = {
-  renderEditor(editor, scheme, selected, onChange, onDelete) {
+  renderEditor(editor, scheme, selected, onChange, onDelete, opts) {
+    opts = opts || {};
     var selectedIds = selected instanceof Set ? selected : new Set(selected ? [selected] : []);
     var p = scheme.find(function(x) { return selectedIds.has(x.id); });
     if (!p) {
@@ -32,6 +33,15 @@ const ComponentEditor = {
       `;
     }
 
+    var issueTips = [];
+    if (opts.checkIssues && opts.checkIssues.length > 0) {
+      issueTips = AssemblyChecker.getTipsForPart(opts.checkIssues, p.id);
+    }
+
+    var detailOptions = {
+      issueTips: issueTips
+    };
+
     var editorHtml = `
       <div class="component-editor-wrapper">
         <div class="editor-section">
@@ -57,7 +67,7 @@ const ComponentEditor = {
             <span class="detail-section-label">构件详情资料</span>
           </div>
           <div class="detail-content-wrapper">
-            ${ComponentDetailRenderer.render(p.type)}
+            ${ComponentDetailRenderer.render(p.type, detailOptions)}
           </div>
         </div>
       </div>

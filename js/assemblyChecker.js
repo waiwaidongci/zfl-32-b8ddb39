@@ -1,4 +1,102 @@
 const AssemblyChecker = {
+  ruleTips: {
+    missing_connect: {
+      title: "缺少连接点设置",
+      tips: [
+        "请为此构件填写连接点描述，如「下承栌斗」「上承华拱」等",
+        "连接点有助于明确构件间的承托关系，便于检查装配合理性"
+      ]
+    },
+    connect_mention_missing: {
+      title: "连接点提到的构件不存在",
+      tips: [
+        "请检查连接点中提到的构件类型名称是否正确",
+        "如方案中确无此构件，请调整连接点描述或添加相应构件"
+      ]
+    },
+    connect_mention_mismatch: {
+      title: "连接点与实际承托关系不匹配",
+      tips: [
+        "请核对连接点描述是否与实际相邻或承托的构件一致",
+        "可检查水平位置是否对齐、垂直间距是否合理"
+      ]
+    },
+    connect_zhutou_misplaced: {
+      title: "柱头连接点使用不当",
+      tips: [
+        "「柱头」连接通常只用于首层的栌斗",
+        "其他层构件请使用「下承」「上承」等描述方式"
+      ]
+    },
+    no_support_layer: {
+      title: "构件完全悬空",
+      tips: [
+        "请检查下方是否有承托构件，可添加下承构件如栌斗、散斗等",
+        "核对垂直方向的层级设置是否正确"
+      ]
+    },
+    suspension: {
+      title: "构件位置悬空",
+      tips: [
+        "请检查下承构件的水平位置，确保上下对齐",
+        "核对垂直间距是否在合理范围内",
+        "可适当调整此构件或下层构件的坐标"
+      ]
+    },
+    invalid_support_type: {
+      title: "承托构件类型不匹配",
+      tips: [
+        "请检查下方承托的构件类型是否允许承托此构件",
+        "例如斗类构件通常承托拱类，而非直接承托昂或耍头"
+      ]
+    },
+    same_layer_overlap: {
+      title: "同层构件重叠",
+      tips: [
+        "请调整同层构件的水平位置，避免重叠过多",
+        "检查两构件的尺寸与间距设置是否合理"
+      ]
+    },
+    direction_mismatch: {
+      title: "方向与连接点不一致",
+      tips: [
+        "请核对构件方向设置（正、左挑、右挑）是否与连接点描述匹配",
+        "如连接点暗示向左出跳，方向应设为「左挑」"
+      ]
+    }
+  },
+
+  getIssuesForPart(issues, partId) {
+    return issues.filter(issue =>
+      issue.partId === partId ||
+      (issue.relatedPartIds && issue.relatedPartIds.includes(partId))
+    );
+  },
+
+  getTipsForPart(issues, partId) {
+    const partIssues = this.getIssuesForPart(issues, partId);
+    const tips = [];
+    const seenRules = new Set();
+
+    for (const issue of partIssues) {
+      if (seenRules.has(issue.rule)) continue;
+      seenRules.add(issue.rule);
+
+      const ruleTip = this.ruleTips[issue.rule];
+      if (ruleTip) {
+        tips.push({
+          rule: issue.rule,
+          severity: issue.severity,
+          message: issue.message,
+          title: ruleTip.title,
+          tips: ruleTip.tips
+        });
+      }
+    }
+
+    return tips;
+  },
+
   checkAll(scheme, partTypes) {
     const issues = [];
 

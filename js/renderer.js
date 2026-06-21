@@ -39,8 +39,8 @@ const Renderer = {
     }
   },
 
-  renderEditor(editor, scheme, selected, onChange, onDelete) {
-    ComponentEditor.renderEditor(editor, scheme, selected, onChange, onDelete);
+  renderEditor(editor, scheme, selected, onChange, onDelete, opts) {
+    ComponentEditor.renderEditor(editor, scheme, selected, onChange, onDelete, opts);
   },
 
   renderTree(tree, scheme) {
@@ -50,8 +50,8 @@ const Renderer = {
     ).join("");
   },
 
-  renderChecks(checks, scheme, parts, onSelectParts) {
-    const result = AssemblyChecker.checkAll(scheme, parts);
+  renderChecks(checks, scheme, parts, onSelectParts, precomputedResult) {
+    const result = precomputedResult || AssemblyChecker.checkAll(scheme, parts);
     const countsHtml = '<div class="item">' + result.counts + '</div>';
 
     if (result.issues.length === 0) {
