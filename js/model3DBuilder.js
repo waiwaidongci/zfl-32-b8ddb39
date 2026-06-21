@@ -16,6 +16,37 @@ const Model3DBuilder = (function() {
     color: 0xffd84d, roughness: 0.4, metalness: 0.3, emissive: 0x664400, emissiveIntensity: 0.3
   });
 
+  const DIFF_MATERIALS = {
+    added: new THREE.MeshStandardMaterial({
+      color: 0x2e7d32, roughness: 0.6, metalness: 0.1, emissive: 0x1b5e20, emissiveIntensity: 0.3,
+      transparent: true, opacity: 0.85
+    }),
+    deleted: new THREE.MeshStandardMaterial({
+      color: 0xc62828, roughness: 0.6, metalness: 0.1, emissive: 0x8e0000, emissiveIntensity: 0.3,
+      transparent: true, opacity: 0.5, wireframe: true
+    }),
+    moved: new THREE.MeshStandardMaterial({
+      color: 0x1565c0, roughness: 0.6, metalness: 0.1, emissive: 0x0d47a1, emissiveIntensity: 0.3,
+      transparent: true, opacity: 0.85
+    }),
+    layer: new THREE.MeshStandardMaterial({
+      color: 0xe65100, roughness: 0.6, metalness: 0.1, emissive: 0xbf360c, emissiveIntensity: 0.3,
+      transparent: true, opacity: 0.85
+    }),
+    dir: new THREE.MeshStandardMaterial({
+      color: 0x6a1b9a, roughness: 0.6, metalness: 0.1, emissive: 0x4a148c, emissiveIntensity: 0.3,
+      transparent: true, opacity: 0.85
+    }),
+    connect: new THREE.MeshStandardMaterial({
+      color: 0x00838f, roughness: 0.6, metalness: 0.1, emissive: 0x006064, emissiveIntensity: 0.3,
+      transparent: true, opacity: 0.85
+    }),
+    unchanged: new THREE.MeshStandardMaterial({
+      color: 0x9e9e9e, roughness: 0.9, metalness: 0, emissive: 0x000000, emissiveIntensity: 0,
+      transparent: true, opacity: 0.3
+    })
+  };
+
   function createLuDou() {
     const group = new THREE.Group();
     const baseGeo = new THREE.BoxGeometry(74, 18, 74);
@@ -201,6 +232,113 @@ const Model3DBuilder = (function() {
     return partsGroup;
   }
 
+  function buildAllWithDiff(scheme, diffResult) {
+    const partsGroup = new THREE.Group();
+    partsGroup.name = "dougongParts";
+
+    const currentPartIds = new Set();
+    scheme.forEach(function(part) {
+      currentPartIds.add(part.id);
+      const mesh = buildPart3D(part);
+      partsGroup.add(mesh);
+    });
+
+    if (diffResult) {
+      if (diffResult.deleted && diffResult.deleted.length > 0) {
+        const deletedGroup = new THREE.Group();
+        deletedGroup.name = "diffDeletedGhosts";
+        diffResult.deleted.forEach(function(item) {
+          if (!item.part) return;
+          if (currentPartIds.has(item.partId)) return;
+          var ghostPart = Object.assign({}, item.part, {
+            _isDiffGhost: true,
+            _diffGhostType: "deleted"
+          });
+          var ghostMesh = buildPart3D(ghostPart);
+          ghostMesh.userData.isDiffGhost = true;
+          ghostMesh.userData.diffGhostType = "deleted";
+          ghostMesh.userData.partId = item.partId + "_ghost_deleted";
+          ghostMesh.userData.originalPartId = item.partId;
+          applyDiffHighlight(ghostMesh, "deleted");
+          deletedGroup.add(ghostMesh);
+        });
+        partsGroup.add(deletedGroup);
+      }
+
+      if (diffResult.moved && diffResult.moved.length > 0) {
+        const movedGhostsGroup = new THREE.Group();
+        movedGhostsGroup.name = "diffMovedGhosts";
+        diffResult.moved.forEach(function(item) {
+          if (!item.part || !item.from) return;
+          var ghostPart = Object.assign({}, item.part, {
+            x: item.from.x,
+            y: item.from.y,
+            _isDiffGhost: true,
+            _diffGhostType: "moved_origin"
+          });
+          var ghostMesh = buildPart3D(ghostPart);
+          ghostMesh.userData.isDiffGhost = true;
+          ghostMesh.userData.diffGhostType = "moved_origin";
+          ghostMesh.userData.partId = item.partId + "_ghost_moved";
+          ghostMesh.userData.originalPartId = item.partId;
+          var moveMat = DIFF_MATERIALS.moved.clone();
+          moveMat.wireframe = true;
+          moveMat.opacity = 0.35;
+          ghostMesh.traverse(function(child) {
+            if (child.isMesh) {
+              child.material = moveMat;
+            }
+          });
+          movedGhostsGroup.add(ghostMesh);
+
+          var origGroup = partsGroup.children.find(function(c) {
+            return c.userData && c.userData.partId === item.partId;
+          });
+          if (origGroup) {
+            var from = {
+              x: (item.from.x - CENTER_X) * SCALE_2D_TO_3D,
+              z: (item.from.y - CENTER_Y) * SCALE_2D_TO_3D,
+              y: (item.part.layer - 1) * LAYER_HEIGHT
+            };
+            var arrow = createMoveArrow(from, origGroup.position);
+            if (arrow) {
+              arrow.userData.partId = item.partId + "_arrow";
+              movedGhostsGroup.add(arrow);
+            }
+          }
+        });
+        partsGroup.add(movedGhostsGroup);
+      }
+    }
+
+    return partsGroup;
+  }
+
+  function createMoveArrow(fromPos, toPos) {
+    var from = new THREE.Vector3(fromPos.x, fromPos.y + 20, fromPos.z);
+    var to = new THREE.Vector3(toPos.x, toPos.y + 20, toPos.z);
+    var dir = new THREE.Vector3().subVectors(to, from);
+    var distance = dir.length();
+    if (distance < 5) return null;
+    dir.normalize();
+
+    var arrowGroup = new THREE.Group();
+
+    var arrowHelper = new THREE.ArrowHelper(
+      dir,
+      from,
+      distance,
+      0x1565c0,
+      Math.min(12, distance * 0.18),
+      Math.min(8, distance * 0.12)
+    );
+    arrowHelper.line.material.transparent = true;
+    arrowHelper.line.material.opacity = 0.75;
+    arrowGroup.add(arrowHelper);
+
+    return arrowGroup;
+  }
+
   function applyHighlight(group, isHighlighted) {
     if (!group) return;
     group.traverse(function(child) {
@@ -220,19 +358,64 @@ const Model3DBuilder = (function() {
 
   function applyExplosion(partsGroup, explodeAmount) {
     if (!partsGroup) return;
-    partsGroup.children.forEach(function(partGroup) {
-      if (partGroup.userData && partGroup.userData.baseY !== undefined) {
-        partGroup.position.y = partGroup.userData.baseY +
-          (partGroup.userData.layer - 1) * explodeAmount;
+    partsGroup.traverse(function(obj) {
+      if (obj.userData && obj.userData.baseY !== undefined && obj.userData.layer !== undefined) {
+        obj.position.y = obj.userData.baseY +
+          (obj.userData.layer - 1) * explodeAmount;
       }
+    });
+  }
+
+  function applyDiffHighlight(group, diffType) {
+    if (!group) return;
+    var mat = DIFF_MATERIALS[diffType] || DIFF_MATERIALS.unchanged;
+    group.traverse(function(child) {
+      if (child.isMesh) {
+        child.material = mat;
+      }
+    });
+  }
+
+  function applyDiffHighlightByIds(partsGroup, diffMap) {
+    if (!partsGroup || !diffMap) return;
+    partsGroup.children.forEach(function(partGroup) {
+      var pid = partGroup.userData ? partGroup.userData.partId : null;
+      if (!pid) return;
+      var primaryType = SchemeDiff.getPrimaryDiffType(diffMap, pid);
+      if (primaryType) {
+        applyDiffHighlight(partGroup, primaryType);
+      } else {
+        applyDiffHighlight(partGroup, "unchanged");
+      }
+    });
+  }
+
+  function clearDiffHighlight(partsGroup) {
+    if (!partsGroup) return;
+    partsGroup.children.forEach(function(partGroup) {
+      var partType = partGroup.userData ? partGroup.userData.partType : null;
+      var mat = MATERIALS[partType] || MATERIALS["散斗"];
+      partGroup.traverse(function(child) {
+        if (child.isMesh) {
+          if (child.userData && child.userData.originalMaterial) {
+            child.material = child.userData.originalMaterial;
+          } else {
+            child.material = mat;
+          }
+        }
+      });
     });
   }
 
   return {
     buildPart3D: buildPart3D,
     buildAll: buildAll,
+    buildAllWithDiff: buildAllWithDiff,
     applyHighlight: applyHighlight,
     applyExplosion: applyExplosion,
+    applyDiffHighlight: applyDiffHighlight,
+    applyDiffHighlightByIds: applyDiffHighlightByIds,
+    clearDiffHighlight: clearDiffHighlight,
     LAYER_HEIGHT: LAYER_HEIGHT,
     SCALE_2D_TO_3D: SCALE_2D_TO_3D
   };

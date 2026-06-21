@@ -67,6 +67,43 @@ var SchemeStorage = {
     return result;
   },
 
+  _normalizeLegacyScheme(scheme) {
+    if (!Array.isArray(scheme)) return [];
+    return scheme.map(function(p, i) {
+      var item = Object.assign({}, p);
+      if (!item.id || typeof item.id !== "string" || item.id.trim() === "") {
+        item.id = "legacy_" + i + "_" + (item.type || "part") + "_" + (item.x || 0) + "_" + (item.y || 0);
+      }
+      if (item.layer === undefined || item.layer === null || isNaN(Number(item.layer))) {
+        item.layer = 1;
+      } else {
+        item.layer = Math.round(Number(item.layer));
+      }
+      if (item.x === undefined || item.x === null || isNaN(Number(item.x))) {
+        item.x = 0;
+      } else {
+        item.x = Math.round(Number(item.x));
+      }
+      if (item.y === undefined || item.y === null || isNaN(Number(item.y))) {
+        item.y = 0;
+      } else {
+        item.y = Math.round(Number(item.y));
+      }
+      if (!item.dir || typeof item.dir !== "string") {
+        item.dir = "正";
+      }
+      if (item.connect === undefined || item.connect === null) {
+        item.connect = "";
+      } else {
+        item.connect = String(item.connect);
+      }
+      if (!item.type) {
+        item.type = "未知构件";
+      }
+      return item;
+    });
+  },
+
   get(id) {
     var raw = localStorage.getItem(this._getSchemeKey(id));
     var data = this._safeParse(raw);
@@ -74,7 +111,7 @@ var SchemeStorage = {
     return {
       id: data.id,
       name: data.name || "未命名方案",
-      scheme: Array.isArray(data.scheme) ? data.scheme : [],
+      scheme: this._normalizeLegacyScheme(data.scheme),
       measurement: data.measurement || null,
       updatedAt: data.updatedAt || data.createdAt || 0,
       createdAt: data.createdAt || 0

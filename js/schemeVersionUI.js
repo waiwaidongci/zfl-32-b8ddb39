@@ -151,8 +151,10 @@ var SchemeVersionUI = {
           '</div>' +
           '<div class="scheme-item-actions">' +
             (isCurrent ?
-              '<button class="secondary tiny" data-action="rename" title="重命名">重命名</button>' :
-              '<button class="secondary tiny" data-action="load" title="加载此方案">加载</button>'
+              '<button class="secondary tiny" data-action="rename" title="重命名">重命名</button>' +
+              '<button class="secondary tiny" data-action="diff" title="与保存版本对比差异">对比</button>' :
+              '<button class="secondary tiny" data-action="load" title="加载此方案">加载</button>' +
+              '<button class="secondary tiny" data-action="diff" title="与当前方案对比差异">对比</button>'
             ) +
             '<button class="secondary tiny" data-action="copy" title="复制此方案">复制</button>' +
             '<button class="secondary tiny danger" data-action="delete" title="删除此方案">删除</button>' +
@@ -217,6 +219,9 @@ var SchemeVersionUI = {
       case "load":
         this._handleLoad(id);
         break;
+      case "diff":
+        this._handleDiff(id);
+        break;
       case "rename":
         this._handleRename(id);
         break;
@@ -237,6 +242,12 @@ var SchemeVersionUI = {
       }
     }
     return true;
+  },
+
+  _handleDiff(id) {
+    if (this.options && typeof this.options.onDiffCompare === "function") {
+      this.options.onDiffCompare(id);
+    }
   },
 
   _handleLoad(id) {

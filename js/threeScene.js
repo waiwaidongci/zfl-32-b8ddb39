@@ -117,14 +117,27 @@ const ThreeScene = (function() {
     raycaster.setFromCamera(mouse, camera);
     const meshes = [];
     partsGroup.traverse(function(child) {
-      if (child.isMesh) meshes.push(child);
+      if (child.isMesh) {
+        var hasGhostParent = false;
+        var p = child;
+        while (p.parent && p !== partsGroup) {
+          if (p.userData && p.userData.isDiffGhost) {
+            hasGhostParent = true;
+            break;
+          }
+          p = p.parent;
+        }
+        if (!hasGhostParent) {
+          meshes.push(child);
+        }
+      }
     });
 
     const intersects = raycaster.intersectObjects(meshes, false);
     if (intersects.length > 0) {
       let obj = intersects[0].object;
       while (obj.parent && obj !== partsGroup) {
-        if (obj.userData && obj.userData.partId) {
+        if (obj.userData && obj.userData.partId && !obj.userData.isDiffGhost) {
           onPartClick(obj.userData.partId, event.shiftKey);
           return;
         }
@@ -194,12 +207,31 @@ const ThreeScene = (function() {
     if (!partsGroup || !camera || !controls) return;
     if (!partIds || partIds.length === 0) return;
 
+    var partIdSet = {};
+    for (var i = 0; i < partIds.length; i++) {
+      partIdSet[partIds[i]] = true;
+    }
+
     var targetGroups = [];
-    partsGroup.children.forEach(function(g) {
-      if (g.userData && partIds.indexOf(g.userData.partId) !== -1) {
-        targetGroups.push(g);
+    partsGroup.traverse(function(obj) {
+      if (obj.userData && obj.userData.partId && partIdSet[obj.userData.partId]) {
+        targetGroups.push(obj);
       }
     });
+
+    if (targetGroups.length === 0) {
+      for (var j = 0; j < partIds.length; j++) {
+        var pid = partIds[j];
+        if (typeof pid === "string" && pid.indexOf("_ghost_") >= 0) {
+          var originalId = pid.replace("_ghost_deleted", "").replace("_ghost_moved", "");
+          partsGroup.traverse(function(obj) {
+            if (obj.userData && obj.userData.originalPartId === originalId) {
+              targetGroups.push(obj);
+            }
+          });
+        }
+      }
+    }
 
     if (targetGroups.length === 0) return;
 

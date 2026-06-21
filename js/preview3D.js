@@ -12,6 +12,7 @@ const Preview3D = (function() {
   let isAssemblyMode = false;
   let onSelectPart = null;
   let _selectionUnsub = null;
+  let _diffResult = null;
 
   const EXPLODE_DISTANCE = 28;
 
@@ -72,7 +73,12 @@ const Preview3D = (function() {
 
   function rebuildScene() {
     if (!ThreeScene.isInitialized()) return;
-    const group = Model3DBuilder.buildAll(currentScheme);
+    let group;
+    if (_diffResult) {
+      group = Model3DBuilder.buildAllWithDiff(currentScheme, _diffResult);
+    } else {
+      group = Model3DBuilder.buildAll(currentScheme);
+    }
     ThreeScene.setParts(group);
     applyExplosion(isExploded);
     refreshHighlights();
@@ -160,6 +166,17 @@ const Preview3D = (function() {
     const partsGroup = ThreeScene.getPartsGroup();
     if (!partsGroup) return;
 
+    if (_diffResult) {
+      Model3DBuilder.applyDiffHighlightByIds(partsGroup, _diffResult.diffMap);
+      partsGroup.children.forEach(function(partGroup) {
+        var pid = partGroup.userData ? partGroup.userData.partId : null;
+        if (pid && highlightedIds.has(pid)) {
+          Model3DBuilder.applyHighlight(partGroup, true);
+        }
+      });
+      return;
+    }
+
     partsGroup.children.forEach(function(partGroup) {
       const pid = partGroup.userData ? partGroup.userData.partId : null;
       const shouldHighlight = pid && highlightedIds.has(pid);
@@ -196,6 +213,11 @@ const Preview3D = (function() {
     if (is3DMode) ThreeScene.handleResize();
   }
 
+  function setDiffMode(active, diffResult) {
+    _diffResult = active ? diffResult : null;
+    refreshHighlights();
+  }
+
   return {
     init: init,
     toggleView: toggleView,
@@ -208,7 +230,8 @@ const Preview3D = (function() {
     toggleExplosion: toggleExplosion,
     setExploded: setExploded,
     isActive: isActive,
-    handleResize: handleResize
+    handleResize: handleResize,
+    setDiffMode: setDiffMode
   };
 })();
 

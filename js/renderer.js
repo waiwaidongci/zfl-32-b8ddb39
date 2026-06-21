@@ -6,6 +6,7 @@ const Renderer = {
     const isAssemblyMode = opts.isAssemblyMode || false;
     const selectedSet = selected instanceof Set ? selected : new Set(selected ? [selected] : []);
     const previewState = opts.previewState || null;
+    const diffResult = opts.diffResult || null;
 
     if (isAssemblyMode) {
       canvas.classList.add("assembly-mode");
@@ -17,6 +18,12 @@ const Renderer = {
       canvas.classList.add("repair-preview-mode");
     } else {
       canvas.classList.remove("repair-preview-mode");
+    }
+
+    if (diffResult) {
+      canvas.classList.add("diff-mode-canvas");
+    } else {
+      canvas.classList.remove("diff-mode-canvas");
     }
 
     const positionAdjustSet = new Set();
@@ -63,10 +70,75 @@ const Renderer = {
         }
       }
 
-      return '<div class="' + classes.join(" ") + previewClass + '" data-id="' + p.id +
+      let diffClass = "";
+      let diffBadge = "";
+      if (diffResult && diffResult.diffMap) {
+        var primaryType = SchemeDiff.getPrimaryDiffType(diffResult.diffMap, p.id);
+        if (primaryType) {
+          diffClass = " diff-" + primaryType;
+          var badgeLabels = {
+            added: "新增",
+            deleted: "删除",
+            moved: "移动",
+            layer: "层级",
+            dir: "方向",
+            connect: "连接"
+          };
+          diffBadge = '<span class="diff-badge ' + primaryType + '">' + badgeLabels[primaryType] + '</span>';
+        } else {
+          diffClass = " diff-unchanged";
+        }
+      }
+
+      return '<div class="' + classes.join(" ") + previewClass + diffClass + '" data-id="' + p.id +
         '" style="left:' + p.x + 'px;top:' + p.y + 'px;--explode:' + (-p.layer * 34) + 'px' + previewStyle + '">' +
-        p.type + overlayHtml + '</div>';
+        p.type + overlayHtml + diffBadge + '</div>';
     }).join("");
+
+    if (diffResult && diffResult.deleted) {
+      diffResult.deleted.forEach(function(item) {
+        var existsInScheme = scheme.some(function(p) { return p.id === item.partId; });
+        if (!existsInScheme && item.part) {
+          var layer = item.part.layer || 1;
+          var partW = _getPartWidth(item.type);
+          var partH = _getPartHeight(item.type);
+          html += '<div class="part diff-deleted-ghost ' + item.type + '" data-ghost-id="' + item.partId +
+            '" style="left:' + item.part.x + 'px;top:' + item.part.y +
+            'px;width:' + partW + 'px;height:' + partH + 'px;--explode:' + (-layer * 34) + 'px;pointer-events:none">' +
+            '<span class="diff-badge deleted">删除</span>' + item.type + '</div>';
+        }
+      });
+    }
+
+    if (diffResult && diffResult.moved) {
+      diffResult.moved.forEach(function(item) {
+        var partW = _getPartWidth(item.type);
+        var partH = _getPartHeight(item.type);
+        var layer = item.part.layer || 1;
+        html += '<div class="diff-move-ghost ' + item.type + '" style="left:' + item.from.x + 'px;top:' + item.from.y +
+          'px;width:' + partW + 'px;height:' + partH +
+          'px;--explode:' + (-layer * 34) + 'px">原位</div>';
+
+        var fromCenterX = item.from.x + partW / 2;
+        var fromCenterY = item.from.y + partH / 2;
+        var toCenterX = item.to.x + partW / 2;
+        var toCenterY = item.to.y + partH / 2;
+        var dx = toCenterX - fromCenterX;
+        var dy = toCenterY - fromCenterY;
+        var distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance > 8) {
+          var angle = Math.atan2(dy, dx) * 180 / Math.PI;
+          html += '<div class="diff-move-arrow" style="' +
+            'left:' + fromCenterX + 'px;' +
+            'top:' + fromCenterY + 'px;' +
+            'width:' + distance + 'px;' +
+            'transform-origin: 0 50%;' +
+            'transform: rotate(' + angle + 'deg);' +
+            '--explode:' + (-layer * 34) + 'px' +
+            '"><div class="diff-move-arrow-head"></div></div>';
+        }
+      });
+    }
 
     if (previewState && previewState.isPreviewing && previewState.showGhostOriginals) {
       scheme.forEach(p => {
@@ -96,10 +168,12 @@ const Renderer = {
 
     canvas.innerHTML = html;
 
+    var isDiffMode = !!diffResult;
     if (!isAssemblyMode) {
-      canvas.querySelectorAll(".part:not(.ghost-original)").forEach(el => {
+      canvas.querySelectorAll(".part:not(.ghost-original):not(.diff-deleted-ghost):not(.diff-move-ghost)").forEach(el => {
         el.onpointerdown = event => {
           const id = el.dataset.id;
+          if (!id) return;
           onSelect(id, event.offsetX, event.offsetY, event.shiftKey);
         };
       });
@@ -197,5 +271,15 @@ const Renderer = {
     });
   }
 };
+
+function _getPartWidth(type) {
+  var sizes = { "栌斗": 74, "华拱": 124, "昂": 112, "耍头": 92, "散斗": 48 };
+  return sizes[type] || 60;
+}
+
+function _getPartHeight(type) {
+  var sizes = { "栌斗": 52, "华拱": 34, "昂": 28, "耍头": 32, "散斗": 38 };
+  return sizes[type] || 40;
+}
 
 if (typeof module !== "undefined") module.exports = { Renderer };
