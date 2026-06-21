@@ -147,13 +147,13 @@ const App = {
           Preview3D.setDiffMode(true, diffResult);
           document.body.classList.add("diff-mode-active");
         } else {
-          if (restoredSnapshot) {
-            self._restoreStateFromSnapshot(restoredSnapshot);
-          }
           self._diffMode = false;
           self._diffResult = null;
           Preview3D.setDiffMode(false, null);
           document.body.classList.remove("diff-mode-active");
+          if (restoredSnapshot) {
+            self._restoreStateFromSnapshot(restoredSnapshot);
+          }
         }
         self.renderAll();
       },
@@ -167,10 +167,18 @@ const App = {
   },
 
   _createStateSnapshot() {
+    var scale = MeasurementState.getScale();
     return {
       scheme: this.scheme.map(function(p) { return Object.assign({}, p); }),
       selectedIds: SelectionManager.getIds().slice(),
       measurement: this._getCurrentMeasurementData(),
+      measurementState: {
+        isActive: MeasurementState.isActive,
+        selectedAnnotationId: MeasurementState.selectedAnnotationId,
+        pendingPoint: MeasurementState.pendingPoint ? Object.assign({}, MeasurementState.pendingPoint) : null,
+        hoverPoint: MeasurementState.hoverPoint ? Object.assign({}, MeasurementState.hoverPoint) : null,
+        snapPoint: MeasurementState.snapPoint ? Object.assign({}, MeasurementState.snapPoint) : null
+      },
       explodeActive: this.canvas.classList.contains("exploded"),
       zoomValue: this.zoomInput ? this.zoomInput.value : null
     };
@@ -186,6 +194,17 @@ const App = {
     }
     if (snapshot.measurement) {
       this._applyMeasurementData(snapshot.measurement);
+    }
+    if (snapshot.measurementState && typeof snapshot.measurementState === "object") {
+      var ms = snapshot.measurementState;
+      MeasurementState.isActive = !!ms.isActive;
+      MeasurementState.selectedAnnotationId = (typeof ms.selectedAnnotationId === "string") ? ms.selectedAnnotationId : null;
+      MeasurementState.pendingPoint = ms.pendingPoint ? Object.assign({}, ms.pendingPoint) : null;
+      MeasurementState.hoverPoint = ms.hoverPoint ? Object.assign({}, ms.hoverPoint) : null;
+      MeasurementState.snapPoint = ms.snapPoint ? Object.assign({}, ms.snapPoint) : null;
+      if (typeof MeasurementState._notify === "function") {
+        MeasurementState._notify();
+      }
     }
     if (snapshot.explodeActive !== undefined) {
       if (snapshot.explodeActive) {

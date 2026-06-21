@@ -42,6 +42,43 @@ var SchemeDiff = {
     return result;
   },
 
+  _cleanPoint(point) {
+    if (!point || typeof point !== "object") return { x: 0, y: 0 };
+    return {
+      x: Math.round(Number(point.x) || 0),
+      y: Math.round(Number(point.y) || 0)
+    };
+  },
+
+  _cleanPointDeep(point) {
+    var clean = this._cleanPoint(point);
+    if (point && typeof point === "object") {
+      if (typeof point.snapType === "string") clean.snapType = point.snapType;
+      if (typeof point.partId === "string") clean.partId = point.partId;
+      if (typeof point.partType === "string") clean.partType = point.partType;
+      if (typeof point.snapLabel === "string") clean.snapLabel = point.snapLabel;
+    }
+    return clean;
+  },
+
+  _pointsContentEqual(p1, p2) {
+    if (!p1 && !p2) return true;
+    if (!p1 || !p2) return false;
+    var a = this._cleanPoint(p1);
+    var b = this._cleanPoint(p2);
+    return a.x === b.x && a.y === b.y;
+  },
+
+  _annotationIdKey(ann, index) {
+    var from = ann.from || ann.point1 || ann.start || {};
+    var to = ann.to || ann.point2 || ann.end || {};
+    var fx = Math.round(Number(from.x) || 0);
+    var fy = Math.round(Number(from.y) || 0);
+    var tx = Math.round(Number(to.x) || 0);
+    var ty = Math.round(Number(to.y) || 0);
+    return "legacy_meas_" + index + "_" + fx + "_" + fy + "_" + tx + "_" + ty;
+  },
+
   _normalizeMeasurement(meas) {
     if (!meas) return { annotations: [], scale: null };
     var result = {
@@ -50,14 +87,40 @@ var SchemeDiff = {
     };
     var normalizedAnns = [];
     for (var i = 0; i < result.annotations.length; i++) {
-      var a = Object.assign({}, result.annotations[i]);
-      if (!a.id) {
-        a.id = "meas_" + i + "_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
-      }
+      var raw = result.annotations[i];
+      var a = {};
+
+      a.id = (raw && typeof raw.id === "string" && raw.id.trim() !== "")
+        ? raw.id
+        : this._annotationIdKey(raw, i);
+
+      var rawFrom = (raw && raw.from) ? raw.from : ((raw && raw.point1) ? raw.point1 : ((raw && raw.start) ? raw.start : null));
+      var rawTo = (raw && raw.to) ? raw.to : ((raw && raw.point2) ? raw.point2 : ((raw && raw.end) ? raw.end : null));
+      a.from = this._cleanPointDeep(rawFrom);
+      a.to = this._cleanPointDeep(rawTo);
+
+      if (raw && typeof raw.label === "string") a.label = raw.label;
+      if (raw && typeof raw.distanceText === "string") a.distanceText = raw.distanceText;
+
       normalizedAnns.push(a);
     }
     result.annotations = normalizedAnns;
+
+    if (result.scale && typeof result.scale === "object") {
+      result.scale = {
+        pixelsPerUnit: Math.round(Number(result.scale.pixelsPerUnit) * 1000) / 1000,
+        unitName: typeof result.scale.unitName === "string" ? result.scale.unitName : "份"
+      };
+    }
     return result;
+  },
+
+  _annotationsEqual(a, b) {
+    if (!a || !b) return false;
+    if (a.id !== b.id) return false;
+    if (!this._pointsContentEqual(a.from, b.from)) return false;
+    if (!this._pointsContentEqual(a.to, b.to)) return false;
+    return true;
   },
 
   compare(currentScheme, savedScheme, currentMeasurement, savedMeasurement) {
@@ -206,6 +269,7 @@ var SchemeDiff = {
   compareMeasurements(currentMeasurement, savedMeasurement) {
     var cur = this._normalizeMeasurement(currentMeasurement);
     var sav = this._normalizeMeasurement(savedMeasurement);
+    var self = this;
 
     var added = [];
     var deleted = [];
@@ -233,9 +297,7 @@ var SchemeDiff = {
           diffType: "measAdded"
         });
       } else {
-        var cStr = JSON.stringify(c);
-        var sStr = JSON.stringify(s);
-        if (cStr !== sStr) {
+        if (!self._annotationsEqual(c, s)) {
           changed.push({
             annotationId: id,
             annotation: c,
@@ -260,12 +322,17 @@ var SchemeDiff = {
     var scaleChanged = false;
     var scaleFrom = null;
     var scaleTo = null;
-    if (cur.scale || sav.scale) {
-      if (JSON.stringify(cur.scale) !== JSON.stringify(sav.scale)) {
+    if (cur.scale && sav.scale) {
+      if (Math.abs(Number(cur.scale.pixelsPerUnit || 0) - Number(sav.scale.pixelsPerUnit || 0)) > 0.001 ||
+          String(cur.scale.unitName || "") !== String(sav.scale.unitName || "")) {
         scaleChanged = true;
         scaleFrom = sav.scale;
         scaleTo = cur.scale;
       }
+    } else if (!!cur.scale !== !!sav.scale) {
+      scaleChanged = true;
+      scaleFrom = sav.scale;
+      scaleTo = cur.scale;
     }
 
     return {
@@ -320,13 +387,18 @@ var SchemeDiff = {
 
   formatMeasurementLabel(annotation) {
     if (!annotation) return "标注";
-    var p1 = annotation.point1 || {};
-    var p2 = annotation.point2 || {};
+    var p1 = annotation.from || annotation.point1 || annotation.start || {};
+    var p2 = annotation.to || annotation.point2 || annotation.end || {};
     var label = annotation.label || "";
     var dist = annotation.distanceText || "";
+    var px = Math.round(Math.sqrt(
+      Math.pow((Number(p2.x) || 0) - (Number(p1.x) || 0), 2) +
+      Math.pow((Number(p2.y) || 0) - (Number(p1.y) || 0), 2)
+    ));
     if (dist) return "距离标注 " + dist;
     if (label) return "标注 " + label;
-    return "标注 (" + (p1.x || 0) + "," + (p1.y || 0) + ") - (" + (p2.x || 0) + "," + (p2.y || 0) + ")";
+    if (px > 0) return "距离标注 " + px + "px";
+    return "标注 (" + (Number(p1.x) || 0) + "," + (Number(p1.y) || 0) + ") - (" + (Number(p2.x) || 0) + "," + (Number(p2.y) || 0) + ")";
   }
 };
 
